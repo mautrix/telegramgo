@@ -174,8 +174,21 @@ func (t *TelegramClient) HandleMatrixMessageRemove(ctx context.Context, msg *bri
 	}
 }
 
-func (t *TelegramClient) PreHandleMatrixReaction(ctx context.Context, msg *bridgev2.MatrixReaction) (bridgev2.MatrixReactionPreResponse, error) {
+func (t *TelegramClient) PreHandleMatrixReaction(ctx context.Context, msg *bridgev2.MatrixReaction) (resp bridgev2.MatrixReactionPreResponse, err error) {
 	panic("pre handle matrix reaction")
+	// sender := ids.MakeUserID(t.loginID)
+	// var maxReactions int
+	// maxReactions, err = t.getReactionLimit(ctx, sender)
+	// if err != nil {
+	// 	return
+	// }
+	//
+	// return bridgev2.MatrixReactionPreResponse{
+	// 	SenderID:     sender,
+	// 	EmojiID:      emojiID,
+	// 	Emoji:        emoji,
+	// 	MaxReactions: maxReactions,
+	// }, nil
 }
 
 func (t *TelegramClient) HandleMatrixReaction(ctx context.Context, msg *bridgev2.MatrixReaction) (reaction *database.Reaction, err error) {

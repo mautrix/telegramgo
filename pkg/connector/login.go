@@ -103,7 +103,7 @@ func (p *PhoneLogin) SubmitUserInput(ctx context.Context, input map[string]strin
 			Logger:         zap.New(zerozap.New(zerolog.Ctx(ctx).With().Str("component", "telegram_login_client").Logger())),
 		})
 		var err error
-		p.clientCancel, err = connectTelegramClient(context.Background(), p.client)
+		p.clientCancel, err = connectTelegramClient(context.Background(), nil, p.client)
 		if err != nil {
 			return nil, err
 		}

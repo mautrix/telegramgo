@@ -168,8 +168,14 @@ func NewTelegramClient(ctx context.Context, tc *TelegramConnector, login *bridge
 		SessionStorage: client.ScopedStore,
 		Logger:         zaplog,
 		UpdateHandler:  updatesManager,
+		OnDead: func() {
+			login.BridgeState.Send(status.BridgeState{
+				StateEvent: status.StateTransientDisconnect,
+				Message:    "Telegram client disconnected",
+			})
+		},
 	})
-	client.clientCancel, err = connectTelegramClient(ctx, client.client)
+	client.clientCancel, err = connectTelegramClient(ctx, login, client.client)
 
 	client.telegramFmtParams = &telegramfmt.FormatParams{
 		GetUserInfoByID: func(ctx context.Context, id int64) (telegramfmt.UserInfo, error) {
@@ -285,7 +291,7 @@ func NewTelegramClient(ctx context.Context, tc *TelegramConnector, login *bridge
 // connectTelegramClient blocks until client is connected, calling Run
 // internally.
 // Technique from: https://github.com/gotd/contrib/blob/master/bg/connect.go
-func connectTelegramClient(ctx context.Context, client *telegram.Client) (context.CancelFunc, error) {
+func connectTelegramClient(ctx context.Context, userLogin *bridgev2.UserLogin, client *telegram.Client) (context.CancelFunc, error) {
 	ctx, cancel := context.WithCancel(ctx)
 
 	errC := make(chan error, 1)
@@ -310,14 +316,16 @@ func connectTelegramClient(ctx context.Context, client *telegram.Client) (contex
 		cancel()
 		return func() {}, err
 	case <-initDone: // init done
+		if userLogin != nil {
+			userLogin.BridgeState.Send(status.BridgeState{StateEvent: status.StateConnected})
+		}
 	}
 
 	return cancel, nil
 }
 
 func (t *TelegramClient) Connect(ctx context.Context) (err error) {
-	t.clientCancel, err = connectTelegramClient(ctx, t.client)
-	t.userLogin.BridgeState.Send(status.BridgeState{StateEvent: status.StateConnected})
+	t.clientCancel, err = connectTelegramClient(ctx, t.userLogin, t.client)
 	return
 }
 

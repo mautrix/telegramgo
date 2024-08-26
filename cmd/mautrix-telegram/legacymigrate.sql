@@ -171,6 +171,33 @@ SELECT
 FROM reaction_old
 INNER JOIN message ON reaction_old.msg_mxid=message.mxid;
 
+INSERT INTO telegram_access_hash (user_id, entity_id, access_hash)
+SELECT user_old.tgid, id, hash
+FROM telethon_entities_old
+LEFT JOIN user_old ON user_old.mxid=session_id
+WHERE user_old.tgid IS NOT NULL;
+
+INSERT INTO telegram_user_state (user_id, pts, qts, date, seq)
+SELECT user_old.tgid, pts, qts, date, seq
+FROM telethon_update_state_old
+LEFT JOIN user_old ON user_old.mxid=session_id
+WHERE entity_id=0 AND user_old.tgid IS NOT NULL;
+
+INSERT INTO telegram_channel_state (user_id, channel_id, pts)
+SELECT user_old.tgid, entity_id, pts
+FROM telethon_update_state_old
+LEFT JOIN user_old ON user_old.mxid=session_id
+WHERE entity_id<>0 AND user_old.tgid IS NOT NULL;
+
+INSERT INTO telegram_username (username, entity_id)
+SELECT username, id
+FROM telethon_entities_old
+ON CONFLICT DO NOTHING;
+
+INSERT INTO telegram_file (id, mxc, mime_type, size)
+SELECT id, mxc, mime_type, size
+FROM telegram_file_old;
+
 -- Python -> Go mx_ table migration
 ALTER TABLE mx_room_state DROP COLUMN is_encrypted;
 ALTER TABLE mx_room_state RENAME COLUMN has_full_member_list TO members_fetched;

@@ -198,6 +198,17 @@ INSERT INTO telegram_file (id, mxc, mime_type, size)
 SELECT id, mxc, mime_type, size
 FROM telegram_file_old;
 
+INSERT INTO disappearing_message (bridge_id, mx_room, mxid, type, timer, disappear_at)
+SELECT
+    '', -- bridge_id
+    room_id,
+    event_id,
+    'after_send',
+    expiration_seconds * 1000000000,
+    expiration_ts * 1000000
+FROM disappearing_message_old
+WHERE expiration_ts<9999999999999 AND expiration_seconds<999999;
+
 -- Python -> Go mx_ table migration
 ALTER TABLE mx_room_state DROP COLUMN is_encrypted;
 ALTER TABLE mx_room_state RENAME COLUMN has_full_member_list TO members_fetched;

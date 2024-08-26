@@ -30,14 +30,25 @@ var (
 	BuildTime = "unknown"
 )
 
-func main() {
-	m := mxmain.BridgeMain{
-		Name:        "mautrix-telegram",
-		URL:         "https://github.com/mautrix/telegram",
-		Description: "A Matrix-Telegram puppeting bridge.",
-		Version:     "0.16.0",
+var c = connector.NewConnector()
+var m = mxmain.BridgeMain{
+	Name:        "mautrix-telegram",
+	URL:         "https://github.com/mautrix/telegram",
+	Description: "A Matrix-Telegram puppeting bridge.",
+	Version:     "0.16.0",
 
-		Connector: connector.NewConnector(),
+	Connector: c,
+}
+
+func main() {
+	m.PostInit = func() {
+		m.CheckLegacyDB(
+			18,
+			"v0.14.0",
+			"v0.16.0",
+			m.LegacyMigrateSimple(legacyMigrateRenameTables, legacyMigrateCopyData, 16),
+			true,
+		)
 	}
 	m.InitVersion(Tag, Commit, BuildTime)
 	m.Run()

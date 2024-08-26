@@ -20,6 +20,7 @@ import (
 	"maunium.net/go/mautrix/bridgev2/matrix/mxmain"
 
 	"go.mau.fi/mautrix-telegram/pkg/connector"
+	"go.mau.fi/mautrix-telegram/pkg/connector/store/upgrades"
 )
 
 // Information to find out exactly which commit the bridge was built from.
@@ -46,7 +47,10 @@ func main() {
 			18,
 			"v0.14.0",
 			"v0.16.0",
-			m.LegacyMigrateSimple(legacyMigrateRenameTables, legacyMigrateCopyData, 16),
+			m.LegacyMigrateWithAnotherUpgrader(
+				legacyMigrateRenameTables, legacyMigrateCopyData, 16,
+				upgrades.Table, "telegram_version", 1,
+			),
 			true,
 		)
 	}

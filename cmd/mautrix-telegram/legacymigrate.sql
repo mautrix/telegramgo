@@ -209,6 +209,9 @@ SELECT
 FROM disappearing_message_old
 WHERE expiration_ts<9999999999999 AND expiration_seconds<999999;
 
+-- TODO migrate backfill queue
+-- TODO do something with the bot_chat table?
+
 -- Python -> Go mx_ table migration
 ALTER TABLE mx_room_state DROP COLUMN is_encrypted;
 ALTER TABLE mx_room_state RENAME COLUMN has_full_member_list TO members_fetched;
@@ -232,3 +235,19 @@ CREATE TABLE mx_registrations (
 );
 
 UPDATE mx_version SET version=7;
+
+DROP TABLE backfill_queue_old;
+DROP TABLE bot_chat_old;
+DROP TABLE contact_old;
+DROP TABLE disappearing_message_old;
+DROP TABLE message_old;
+DROP TABLE portal_old;
+DROP TABLE puppet_old;
+DROP TABLE reaction_old;
+DROP TABLE telegram_file_old;
+DROP TABLE telethon_entities_old;
+DROP TABLE telethon_sent_files_old;
+DROP TABLE telethon_sessions_old;
+DROP TABLE telethon_update_state_old;
+DROP TABLE user_old;
+DROP TABLE user_portal_old;

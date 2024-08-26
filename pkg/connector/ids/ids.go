@@ -81,7 +81,6 @@ func ParseMessageID(networkID networkid.MessageID) (channelID int64, messageID i
 		messageID, err = strconv.Atoi(parts[1])
 	} else {
 		err = fmt.Errorf("invalid number of parts in message ID")
-		return
 	}
 	return
 }

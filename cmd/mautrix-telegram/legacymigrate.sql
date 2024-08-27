@@ -8,10 +8,7 @@ UPDATE telethon_sessions_old SET json_data=
     -- only: sqlite (line commented)
 --  json_object
     (
-        -- only: postgres
         'auth_key', encode(auth_key, 'base64'),
-        -- only: sqlite (line commented)
---      'auth_key', replace(base64(auth_key), x'0A', ''),
         'dc_id', dc_id,
         'server_address', server_address,
         'port', port

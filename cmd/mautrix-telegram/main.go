@@ -17,6 +17,10 @@
 package main
 
 import (
+	"encoding/base64"
+	"fmt"
+
+	"go.mau.fi/util/dbutil/litestream"
 	"maunium.net/go/mautrix/bridgev2/bridgeconfig"
 	"maunium.net/go/mautrix/bridgev2/matrix/mxmain"
 
@@ -40,6 +44,15 @@ var m = mxmain.BridgeMain{
 	Version:     "0.16.0",
 
 	Connector: c,
+}
+
+func init() {
+	litestream.Functions["encode"] = func(data []byte, encoding string) string {
+		if encoding == "base64" {
+			return base64.StdEncoding.EncodeToString(data)
+		}
+		panic(fmt.Errorf("unknown encoding %q", encoding))
+	}
 }
 
 func main() {

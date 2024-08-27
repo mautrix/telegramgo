@@ -17,6 +17,7 @@
 package main
 
 import (
+	"maunium.net/go/mautrix/bridgev2/bridgeconfig"
 	"maunium.net/go/mautrix/bridgev2/matrix/mxmain"
 
 	"go.mau.fi/mautrix-telegram/pkg/connector"
@@ -42,7 +43,18 @@ var m = mxmain.BridgeMain{
 }
 
 func main() {
+	bridgeconfig.HackyMigrateLegacyNetworkConfig = migrateLegacyConfig
+	versionWithoutCommit := m.Version
 	m.PostInit = func() {
+		if c.Config.DeviceInfo.AppVersion == "auto" {
+			c.Config.DeviceInfo.AppVersion = versionWithoutCommit
+		}
+		if c.Config.DeviceInfo.SystemVersion == "auto" {
+			c.Config.DeviceInfo.SystemVersion = ""
+		}
+		if c.Config.DeviceInfo.DeviceModel == "auto" || c.Config.DeviceInfo.DeviceModel == "" {
+			c.Config.DeviceInfo.DeviceModel = "mautrix-telegram"
+		}
 		m.CheckLegacyDB(
 			18,
 			"v0.14.0",

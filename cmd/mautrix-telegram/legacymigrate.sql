@@ -31,7 +31,7 @@ SELECT
 --  json_object
     (
         'phone', COALESCE(tg_phone, ''),
-        'session', json((SELECT json_data FROM telethon_sessions_old WHERE session_id=tgid))
+        'session', json((SELECT json_data FROM telethon_sessions_old WHERE session_id=mxid))
     ) -- metadata
 FROM user_old
 WHERE tgid IS NOT NULL;
@@ -44,13 +44,13 @@ SELECT
     '', -- bridge_id
     CAST(id AS TEXT), -- id
     displayname, -- name
-    photo_id, -- avatar_id
+    COALESCE(photo_id, ''), -- avatar_id
     '', -- avatar_hash
-    avatar_url, -- avatar_mxc
+    COALESCE(avatar_url, ''), -- avatar_mxc
     name_set,
     avatar_set,
     contact_info_set,
-    is_bot,
+    COALESCE(is_bot, false),
     '[]', -- identifiers
     -- only: postgres
     jsonb_build_object
@@ -62,11 +62,13 @@ SELECT
         'phone', phone,
         'name_source', displayname_source,
         'name_quality', displayname_quality,
-        'name_not_contact', CASE WHEN displayname_contact THEN json('false') ELSE json('true') END,
+        'name_not_contact', CASE WHEN displayname_contact THEN json('false') ELSE json('true') END
     ) -- metadata
 FROM puppet_old;
 
 DELETE FROM user_portal_old WHERE portal IN (SELECT tgid FROM portal_old WHERE peer_type<>'channel');
+-- TODO migrate backfill queue instead of deleting
+DELETE FROM backfill_queue_old WHERE portal_tgid IN (SELECT tgid FROM portal_old WHERE peer_type<>'channel');
 
 UPDATE portal_old
 SET tg_receiver=COALESCE((SELECT "user" FROM user_portal_old WHERE portal=portal_old.tgid LIMIT 1), tg_receiver)
@@ -88,11 +90,11 @@ SELECT
     CAST(tg_receiver AS TEXT), -- receiver
     mxid, -- mxid
     CASE WHEN peer_type='user' THEN CAST(tgid AS TEXT) END, -- other_user_id
-    title, -- name
-    about, -- topic
-    photo_id, -- avatar_id
+    COALESCE(title, ''), -- name
+    COALESCE(about, ''), -- topic
+    COALESCE(photo_id, ''), -- avatar_id
     '', -- avatar_hash
-    avatar_url, -- avatar_mxc
+    COALESCE(avatar_url, ''), -- avatar_mxc
     name_set, -- name_set
     avatar_set, -- avatar_set
     false, -- topic_set
@@ -134,6 +136,9 @@ INNER JOIN user_old ON portal_old.tg_receiver = user_old.tgid
 WHERE portal_old.tg_receiver<>portal_old.tgid
 ON CONFLICT (bridge_id, user_mxid, login_id, portal_id, portal_receiver) DO NOTHING;
 
+INSERT INTO ghost (bridge_id, id, name, avatar_id, avatar_hash, avatar_mxc, name_set, avatar_set, contact_info_set, is_bot, identifiers, metadata)
+VALUES ('', '', '', '', '', '', false, false, false, false, '[]', '{}');
+
 INSERT INTO message (
     bridge_id, id, part_id, mxid, room_id, room_receiver, sender_id, sender_mxid, timestamp, edit_count, metadata
 )
@@ -144,8 +149,8 @@ SELECT
     message_old.mxid, -- mxid
     CAST(portal_old.tgid AS TEXT), -- room_id
     CAST(portal_old.tg_receiver AS TEXT), -- room_receiver
-    CAST(sender AS TEXT), -- sender_id
-    sender_mxid,
+    COALESCE(CAST(sender AS TEXT), ''), -- sender_id
+    COALESCE(sender_mxid, ''),
     0, -- timestamp
     edit_index, -- edit_count
     '{}' -- metadata
@@ -175,7 +180,7 @@ INSERT INTO telegram_access_hash (user_id, entity_id, access_hash)
 SELECT user_old.tgid, id, hash
 FROM telethon_entities_old
 LEFT JOIN user_old ON user_old.mxid=session_id
-WHERE user_old.tgid IS NOT NULL;
+WHERE user_old.tgid IS NOT NULL AND hash<>0;
 
 INSERT INTO telegram_user_state (user_id, pts, qts, date, seq)
 SELECT user_old.tgid, pts, qts, date, seq
@@ -192,6 +197,7 @@ WHERE entity_id<>0 AND user_old.tgid IS NOT NULL;
 INSERT INTO telegram_username (username, entity_id)
 SELECT username, id
 FROM telethon_entities_old
+WHERE username<>''
 ON CONFLICT DO NOTHING;
 
 INSERT INTO telegram_file (id, mxc, mime_type, size)
@@ -209,7 +215,6 @@ SELECT
 FROM disappearing_message_old
 WHERE expiration_ts<9999999999999 AND expiration_seconds<999999;
 
--- TODO migrate backfill queue
 -- TODO do something with the bot_chat table?
 
 -- Python -> Go mx_ table migration
@@ -236,18 +241,18 @@ CREATE TABLE mx_registrations (
 
 UPDATE mx_version SET version=7;
 
+DROP TABLE user_portal_old;
 DROP TABLE backfill_queue_old;
 DROP TABLE bot_chat_old;
 DROP TABLE contact_old;
 DROP TABLE disappearing_message_old;
 DROP TABLE message_old;
+DROP TABLE reaction_old;
 DROP TABLE portal_old;
 DROP TABLE puppet_old;
-DROP TABLE reaction_old;
+DROP TABLE user_old;
 DROP TABLE telegram_file_old;
 DROP TABLE telethon_entities_old;
 DROP TABLE telethon_sent_files_old;
 DROP TABLE telethon_sessions_old;
 DROP TABLE telethon_update_state_old;
-DROP TABLE user_old;
-DROP TABLE user_portal_old;

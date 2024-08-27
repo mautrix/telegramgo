@@ -40,7 +40,7 @@ INSERT INTO ghost (
 SELECT
     '', -- bridge_id
     CAST(id AS TEXT), -- id
-    displayname, -- name
+    COALESCE(displayname, ''), -- name
     COALESCE(photo_id, ''), -- avatar_id
     '', -- avatar_hash
     COALESCE(avatar_url, ''), -- avatar_mxc
@@ -149,11 +149,12 @@ SELECT
     COALESCE(CAST(sender AS TEXT), ''), -- sender_id
     COALESCE(sender_mxid, ''),
     0, -- timestamp
-    edit_index, -- edit_count
+    0, -- edit_count
     '{}' -- metadata
 FROM message_old
 INNER JOIN portal_old ON mx_room=portal_old.mxid
-WHERE tg_space=portal_old.tgid OR tg_space=portal_old.tg_receiver;
+WHERE (tg_space=portal_old.tgid OR tg_space=portal_old.tg_receiver) AND edit_index=0;
+-- TODO migrate edit_index?
 
 INSERT INTO reaction (
     bridge_id, message_id, message_part_id, sender_id, emoji_id, room_id, room_receiver, mxid, timestamp, emoji, metadata

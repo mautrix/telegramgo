@@ -85,6 +85,7 @@ func main() {
 			exerrors.Must(m.DB.Exec(ctx, `
 				PRAGMA foreign_keys = 'OFF';
 				DROP TABLE telegram_file_old;
+				PRAGMA foreign_key_check;
 				PRAGMA foreign_keys = 'ON';
 			`))
 		}

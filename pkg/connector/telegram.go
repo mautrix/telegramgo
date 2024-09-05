@@ -17,6 +17,8 @@ import (
 	"maunium.net/go/mautrix/bridgev2/simplevent"
 	"maunium.net/go/mautrix/event"
 
+	"go.mau.fi/util/exfmt"
+
 	"go.mau.fi/mautrix-telegram/pkg/connector/emojis"
 	"go.mau.fi/mautrix-telegram/pkg/connector/ids"
 	"go.mau.fi/mautrix-telegram/pkg/connector/media"
@@ -127,6 +129,8 @@ func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, update IGetMess
 					},
 				},
 			}
+		case *tg.MessageActionPhoneCall:
+			return t.onPhoneCall(ctx, sender, msg, action)
 		// case *tg.MessageActionChatCreate:
 		// case *tg.MessageActionChannelCreate:
 		// case *tg.MessageActionChatMigrateTo:
@@ -136,7 +140,6 @@ func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, update IGetMess
 		// case *tg.MessageActionGameScore:
 		// case *tg.MessageActionPaymentSentMe:
 		// case *tg.MessageActionPaymentSent:
-		// case *tg.MessageActionPhoneCall:
 		// case *tg.MessageActionScreenshotTaken:
 		// case *tg.MessageActionCustomAction:
 		// case *tg.MessageActionBotAllowed:
@@ -171,6 +174,68 @@ func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, update IGetMess
 	default:
 		return fmt.Errorf("unknown message type %T", msg)
 	}
+	return nil
+}
+
+func (t *TelegramClient) onPhoneCall(ctx context.Context, sender bridgev2.EventSender, msg *tg.MessageService, action *tg.MessageActionPhoneCall) error {
+	var body strings.Builder
+	if action.Video {
+		body.WriteString("Video call")
+	} else {
+		body.WriteString("Call")
+	}
+	body.WriteString(" ")
+	switch action.Reason.TypeID() {
+	case tg.PhoneCallDiscardReasonMissedTypeID:
+		if sender.IsFromMe {
+			body.WriteString("cancelled")
+		} else {
+			body.WriteString("missed")
+		}
+	case tg.PhoneCallDiscardReasonDisconnectTypeID:
+		body.WriteString("disconnected")
+	case tg.PhoneCallDiscardReasonHangupTypeID:
+		body.WriteString("ended")
+	case tg.PhoneCallDiscardReasonBusyTypeID:
+		body.WriteString("rejected")
+	default:
+		return fmt.Errorf("unknown call end reason %T", action.Reason)
+	}
+	if action.Duration > 0 {
+		body.WriteString(" (")
+		body.WriteString(exfmt.Duration(time.Duration(action.Duration) * time.Second))
+		body.WriteString(")")
+	}
+
+	t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.Message[any]{
+		EventMeta: simplevent.EventMeta{
+			Type: bridgev2.RemoteEventMessage,
+			LogContext: func(c zerolog.Context) zerolog.Context {
+				return c.
+					Int("message_id", msg.GetID()).
+					Str("sender", string(sender.Sender)).
+					Str("sender_login", string(sender.SenderLogin)).
+					Bool("is_from_me", sender.IsFromMe).
+					Stringer("peer_id", msg.PeerID)
+			},
+			Sender:       sender,
+			PortalKey:    ids.MakePortalKey(msg.PeerID, t.loginID),
+			CreatePortal: true,
+			Timestamp:    time.Unix(int64(msg.Date), 0),
+		},
+		ID: ids.GetMessageIDFromMessage(msg),
+		ConvertMessageFunc: func(ctx context.Context, portal *bridgev2.Portal, intent bridgev2.MatrixAPI, data any) (*bridgev2.ConvertedMessage, error) {
+			return &bridgev2.ConvertedMessage{
+				Parts: []*bridgev2.ConvertedMessagePart{
+					{
+						ID:      networkid.PartID("call"),
+						Type:    event.EventMessage,
+						Content: &event.MessageEventContent{MsgType: event.MsgNotice, Body: body.String()},
+					},
+				},
+			}, nil
+		},
+	})
 	return nil
 }
 

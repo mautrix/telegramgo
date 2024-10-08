@@ -166,6 +166,13 @@ func (c *TelegramClient) convertToMatrix(ctx context.Context, portal *bridgev2.P
 		}
 	}
 
+	if ttl, ok := msg.GetTTLPeriod(); ok && disappearingSetting == nil {
+		cm.Disappear = database.DisappearingSetting{
+			Type:  database.DisappearingTypeAfterSend,
+			Timer: time.Duration(ttl) * time.Second,
+		}
+	}
+
 	return
 }
 

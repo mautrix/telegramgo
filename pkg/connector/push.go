@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 
+	"encoding/base64"
+	"encoding/hex"
+
 	"github.com/gotd/td/tg"
 	"go.mau.fi/util/random"
 	"maunium.net/go/mautrix/bridgev2"
@@ -28,6 +31,11 @@ func (t *TelegramClient) RegisterPushNotifications(ctx context.Context, pushType
 		tokenType = 2
 	case bridgev2.PushTypeAPNs:
 		tokenType = 1
+		if tokenData, err := base64.StdEncoding.DecodeString(token); err == nil {
+			token = hex.EncodeToString(tokenData)
+		} else {
+			return fmt.Errorf("failed to decode APNs token: %w", err)
+		}
 	default:
 		return fmt.Errorf("unsupported push type %s", pushType)
 	}

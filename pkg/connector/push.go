@@ -222,6 +222,8 @@ var PushMessageFormats = map[string]string{
 	"STORY_NOTEXT":                   "%[1]v posted a story",
 }
 
+var FullSyncOnConnectBackground = false
+
 func (t *TelegramClient) ConnectBackground(ctx context.Context, params *bridgev2.ConnectBackgroundParams) error {
 	data, _ := params.ExtraData.(*PushNotificationData)
 	var relatedPortal *bridgev2.Portal
@@ -275,12 +277,14 @@ func (t *TelegramClient) ConnectBackground(ctx context.Context, params *bridgev2
 			FormattedNotification: notificationText,
 		})
 	}
-	t.Connect(ctx)
-	defer t.Disconnect()
-	// TODO is it possible to safely only sync one chat?
-	select {
-	case <-time.After(20 * time.Second):
-	case <-ctx.Done():
+	if FullSyncOnConnectBackground {
+		t.Connect(ctx)
+		defer t.Disconnect()
+		// TODO is it possible to safely only sync one chat?
+		select {
+		case <-time.After(20 * time.Second):
+		case <-ctx.Done():
+		}
 	}
 	return nil
 }

@@ -102,6 +102,8 @@ func (t *TelegramClient) ConnectBackground(ctx context.Context, params *bridgev2
 			sender, err = t.main.Bridge.GetGhostByID(ctx, ids.MakeChannelUserID(data.ChatFromBroadcastID))
 		} else if data.ChatFromGroupID != 0 {
 			sender, err = t.main.Bridge.GetGhostByID(ctx, ids.MakeChannelUserID(data.ChatFromGroupID))
+		} else if data.ChatFromID != 0 {
+			sender, err = t.main.Bridge.GetGhostByID(ctx, ids.MakeUserID(data.ChatFromID))
 		} else if data.FromID != 0 {
 			sender, err = t.main.Bridge.GetGhostByID(ctx, ids.MakeUserID(data.FromID))
 		}

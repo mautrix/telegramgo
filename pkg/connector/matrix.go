@@ -38,6 +38,7 @@ import (
 	"github.com/rs/zerolog"
 	"go.mau.fi/util/ffmpeg"
 	"go.mau.fi/util/variationselector"
+	"go.mau.fi/webp"
 	"maunium.net/go/mautrix/bridgev2"
 	"maunium.net/go/mautrix/bridgev2/database"
 	"maunium.net/go/mautrix/bridgev2/networkid"
@@ -75,7 +76,23 @@ func (t *TelegramClient) transferMediaToTelegram(ctx context.Context, content *e
 	filename := getMediaFilename(content)
 	err := t.main.Bridge.Bot.DownloadMediaToFile(ctx, content.URL, content.File, false, func(f *os.File) (err error) {
 		uploadFilename := f.Name()
-		if sticker && content.Info != nil && (content.Info.MimeType != "video/webm" && content.Info.MimeType != "application/x-tgsticker") {
+		if sticker && content.Info != nil && (content.Info.MimeType == "image/png" || content.Info.MimeType == "image/jpeg") {
+			tempFile, err := os.CreateTemp("", "telegram-sticker-*")
+			if err != nil {
+				return err
+			}
+			defer func() {
+				tempFile.Close()
+				os.Remove(tempFile.Name())
+			}()
+			if image, _, err := image.Decode(f); err != nil {
+				return fmt.Errorf("failed to decode sticker image: %w", err)
+			} else if err := webp.Encode(tempFile, image, nil); err != nil {
+				return fmt.Errorf("failed to encode sticker webp image: %w", err)
+			}
+			uploadFilename = tempFile.Name()
+			content.Info.MimeType = "image/webp"
+		} else if sticker && content.Info != nil && (content.Info.MimeType != "video/webm" && content.Info.MimeType != "application/x-tgsticker") {
 			uploadFilename, err = ffmpeg.ConvertPath(ctx, uploadFilename, ".webp", []string{}, []string{}, false)
 			if err != nil {
 				return fmt.Errorf("failed to convert sticker to webm: %+w", err)
@@ -201,6 +218,19 @@ func parseRandomID(txnID networkid.RawTransactionID) int64 {
 }
 
 func (t *TelegramClient) HandleMatrixMessage(ctx context.Context, msg *bridgev2.MatrixMessage) (resp *bridgev2.MatrixMessageResponse, err error) {
+	// Handle Matrix events only after initial connection has been established to avoid deadlocking gotd
+	select {
+	case <-t.initialized:
+	default:
+		zerolog.Ctx(ctx).Warn().Msg("Got Matrix event before connected, blocking until done")
+
+		select {
+		case <-t.initialized:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+
 	peer, err := t.inputPeerForPortalID(ctx, msg.Portal.ID)
 	if err != nil {
 		return nil, err

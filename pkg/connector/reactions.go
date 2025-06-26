@@ -160,7 +160,7 @@ func (t *TelegramClient) handleTelegramReactions(ctx context.Context, msg *tg.Me
 	if !res.Success {
 		return ErrFailToQueueEvent
 	}
-	
+
 	return nil
 }
 

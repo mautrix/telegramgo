@@ -54,8 +54,8 @@ import (
 )
 
 var (
-	ErrNoAuthKey = errors.New("user does not have auth key")
-	ErrFailToQueueEvent = errors.New("Failed to queue event")
+	ErrNoAuthKey        = errors.New("user does not have auth key")
+	ErrFailToQueueEvent = errors.New("failed to queue event")
 )
 
 type TelegramClient struct {

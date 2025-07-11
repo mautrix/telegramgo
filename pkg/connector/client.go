@@ -68,10 +68,8 @@ type TelegramClient struct {
 	userLogin      *bridgev2.UserLogin
 	client         *telegram.Client
 	updatesManager *updates.Manager
-	updatesCloseC  chan struct{}
 	clientCtx      context.Context
 	clientCancel   context.CancelFunc
-	clientCloseC   chan struct{}
 	initialized    chan struct{}
 	mu             sync.Mutex
 
@@ -515,6 +513,7 @@ func (t *TelegramClient) Connect(ctx context.Context) {
 	defer t.mu.Unlock()
 
 	log := zerolog.Ctx(ctx).With().Int64("user_id", t.telegramUserID).Logger()
+	ctx = log.WithContext(ctx)
 
 	if !t.userLogin.Metadata.(*UserLoginMetadata).Session.HasAuthKey() {
 		log.Warn().Msg("user does not have an auth key, sending bad credentials state")
@@ -524,61 +523,19 @@ func (t *TelegramClient) Connect(ctx context.Context) {
 
 	log.Info().Msg("Connecting client")
 
-	t.clientCtx, t.clientCancel = context.WithCancel(ctx)
-	t.clientCloseC = make(chan struct{})
-	t.updatesCloseC = make(chan struct{})
+	// Add a cancellation layer we can use for explicit Disconnect
+
+	ctx, cancel := context.WithCancel(ctx)
+	t.clientCtx = ctx
+	t.clientCancel = cancel
+
 	go func() {
-		defer close(t.initialized)
-		connectClientCloseC, err := connectTelegramClient(t.clientCtx, t.clientCancel, t.client)
-		if err != nil {
-			t.sendBadCredentialsOrUnknownError(err)
-			close(t.updatesCloseC)
-			return
-		}
-
-		// awful hack to prevent assigning clientCloseC from racing Disconnect()
-		go func() {
-			<-connectClientCloseC
-			close(t.clientCloseC)
-		}()
-
-		go func() {
-			defer close(t.updatesCloseC)
-			for {
-				err = t.updatesManager.Run(t.clientCtx, t.client.API(), t.telegramUserID, updates.AuthOptions{})
-				if err == nil || errors.Is(err, context.Canceled) {
-					return
-				}
-
-				zerolog.Ctx(t.clientCtx).Err(err).Msg("failed to run updates manager, retrying")
-
-				select {
-				case <-t.clientCtx.Done():
-					return
-				case <-time.After(5 * time.Second):
-				}
-			}
-		}()
-
-		// Update the logged-in user's ghost info (this also updates the user
-		// login's remote name and profile).
-		if me, err := t.client.Self(t.clientCtx); err != nil {
-			t.sendBadCredentialsOrUnknownError(err)
-		} else if _, err := t.updateGhost(t.clientCtx, t.telegramUserID, me); err != nil {
-			t.sendBadCredentialsOrUnknownError(err)
-		} else {
-			t.userLogin.BridgeState.Send(status.BridgeState{StateEvent: status.StateConnected})
-		}
-
-		// Fix the "Telegram Saved Messages" chat
-		t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatResync{
-			ChatInfo: t.getDMChatInfo(t.telegramUserID),
-			EventMeta: simplevent.EventMeta{
-				Type:         bridgev2.RemoteEventChatResync,
-				PortalKey:    t.makePortalKeyFromID(ids.PeerTypeUser, t.telegramUserID),
-				CreatePortal: false, // Do not create the portal if it doesn't already exist
-			},
+		err := t.client.Run(ctx, func(ctx context.Context) error {
+			log.Info().Msg("Client running starting updates")
+			close(t.initialized)
+			return t.updatesManager.Run(ctx, t.client.API(), t.telegramUserID, updates.AuthOptions{})
 		})
+		log.Info().Err(err).Msg("Client stopped")
 	}()
 }
 
@@ -590,17 +547,8 @@ func (t *TelegramClient) Disconnect() {
 
 	if t.clientCancel != nil {
 		t.clientCancel()
-		t.clientCancel = nil
-	}
-	if t.clientCloseC != nil {
-		t.userLogin.Log.Debug().Msg("Waiting for client to finish")
-		<-t.clientCloseC
-		t.clientCloseC = nil
-	}
-	if t.updatesCloseC != nil {
-		t.userLogin.Log.Debug().Msg("Waiting for updates to finish")
-		<-t.updatesCloseC
-		t.updatesCloseC = nil
+		t.userLogin.Log.Info().Msg("Waiting for client")
+		<-t.clientCtx.Done()
 	}
 
 	t.userLogin.Log.Info().Msg("Disconnect complete")

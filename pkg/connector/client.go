@@ -391,38 +391,6 @@ func NewTelegramClient(ctx context.Context, tc *TelegramConnector, login *bridge
 	return &client, err
 }
 
-// connectTelegramClient blocks until client is connected, calling Run
-// internally.
-// Technique from: https://github.com/gotd/contrib/blob/master/bg/connect.go
-func connectTelegramClient(ctx context.Context, cancel context.CancelFunc, client *telegram.Client) (<-chan struct{}, error) {
-	errC := make(chan error, 1)
-	initDone := make(chan struct{})
-	closeC := make(chan struct{})
-	go func() {
-		defer close(errC)
-		defer close(closeC)
-		errC <- client.Run(ctx, func(ctx context.Context) error {
-			close(initDone)
-			<-ctx.Done()
-			if errors.Is(ctx.Err(), context.Canceled) {
-				return nil
-			}
-			return ctx.Err()
-		})
-	}()
-
-	select {
-	case <-ctx.Done(): // context canceled
-		cancel()
-		return nil, fmt.Errorf("context cancelled before init done: %w", ctx.Err())
-	case err := <-errC: // startup timeout
-		cancel()
-		return nil, fmt.Errorf("client connection timeout: %w", err)
-	case <-initDone: // init done
-	}
-	return closeC, nil
-}
-
 func (t *TelegramClient) onDead() {
 	prevState := t.userLogin.BridgeState.GetPrev().StateEvent
 	if slices.Contains([]status.BridgeStateEvent{

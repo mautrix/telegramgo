@@ -75,7 +75,7 @@ func finalizeLogin(ctx context.Context, user *bridgev2.User, authorization *tg.A
 	if err != nil {
 		return nil, fmt.Errorf("failed to save new login: %w", err)
 	}
-	ul.Client.Connect(ul.Log.WithContext(context.Background()))
+	ul.Client.Connect(ul.Log.WithContext(ctx))
 	client := ul.Client.(*TelegramClient)
 	// Connecting is non-blocking so wait for gotd to initialize before doing anythign to avoid deadlocking
 	select {
@@ -89,7 +89,7 @@ func finalizeLogin(ctx context.Context, user *bridgev2.User, authorization *tg.A
 	}
 	go func() {
 		log := ul.Log.With().Str("component", "login_sync_chats").Logger()
-		if err := client.SyncChats(log.WithContext(context.Background())); err != nil {
+		if err := client.SyncChats(log.WithContext(ctx)); err != nil {
 			log.Err(err).Msg("Failed to sync chats")
 		}
 	}()

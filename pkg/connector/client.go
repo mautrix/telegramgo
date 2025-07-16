@@ -500,13 +500,17 @@ func (t *TelegramClient) Connect(_ context.Context) {
 	t.clientCtx = ctx
 	t.clientCancel = cancel
 	t.clientDoneCh = make(chan error)
+	initialized := sync.OnceFunc(func() {
+		close(t.initialized)
+	})
 
 	go func() {
 		err := t.client.Run(ctx, func(ctx context.Context) error {
 			log.Info().Msg("Client running starting updates")
-			close(t.initialized)
+			initialized()
 			return t.updatesManager.Run(ctx, t.client.API(), t.telegramUserID, updates.AuthOptions{})
 		})
+		initialized()
 		log.Info().Err(err).Msg("Client stopped")
 		t.clientDoneCh <- err
 	}()

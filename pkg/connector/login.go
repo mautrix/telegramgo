@@ -89,7 +89,7 @@ func finalizeLogin(ctx context.Context, user *bridgev2.User, authorization *tg.A
 	}
 	go func() {
 		log := ul.Log.With().Str("component", "login_sync_chats").Logger()
-		if err := client.SyncChats(log.WithContext(ctx)); err != nil {
+		if err := client.SyncChats(log.WithContext(client.clientCtx)); err != nil {
 			log.Err(err).Msg("Failed to sync chats")
 		}
 	}()

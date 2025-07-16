@@ -70,6 +70,7 @@ type TelegramClient struct {
 	updatesManager *updates.Manager
 	clientCtx      context.Context
 	clientCancel   context.CancelFunc
+	clientDoneCh   chan error
 	initialized    chan struct{}
 	mu             sync.Mutex
 
@@ -476,11 +477,13 @@ func (t *TelegramClient) onAuthError(err error) {
 	}()
 }
 
-func (t *TelegramClient) Connect(ctx context.Context) {
+func (t *TelegramClient) Connect(_ context.Context) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	log := zerolog.Ctx(ctx).With().Int64("user_id", t.telegramUserID).Logger()
+	ctx := context.Background()
+
+	log := zerolog.Ctx(context.Background()).With().Int64("user_id", t.telegramUserID).Logger()
 	ctx = log.WithContext(ctx)
 
 	if !t.userLogin.Metadata.(*UserLoginMetadata).Session.HasAuthKey() {
@@ -496,6 +499,7 @@ func (t *TelegramClient) Connect(ctx context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 	t.clientCtx = ctx
 	t.clientCancel = cancel
+	t.clientDoneCh = make(chan error)
 
 	go func() {
 		err := t.client.Run(ctx, func(ctx context.Context) error {
@@ -504,6 +508,7 @@ func (t *TelegramClient) Connect(ctx context.Context) {
 			return t.updatesManager.Run(ctx, t.client.API(), t.telegramUserID, updates.AuthOptions{})
 		})
 		log.Info().Err(err).Msg("Client stopped")
+		t.clientDoneCh <- err
 	}()
 }
 
@@ -516,7 +521,8 @@ func (t *TelegramClient) Disconnect() {
 	if t.clientCancel != nil {
 		t.clientCancel()
 		t.userLogin.Log.Info().Msg("Waiting for client")
-		<-t.clientCtx.Done()
+		err := <-t.clientDoneCh
+		t.userLogin.Log.Info().Err(err).Msg("Client done")
 	}
 
 	t.userLogin.Log.Info().Msg("Disconnect complete")

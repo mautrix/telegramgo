@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+	"go.mau.fi/util/exsync"
 	"go.mau.fi/zerozap"
 	"go.uber.org/zap"
 	"maunium.net/go/mautrix/bridgev2"
@@ -87,20 +88,16 @@ func (q *QRLogin) Start(ctx context.Context) (*bridgev2.LoginStep, error) {
 
 	q.authClientCtx, q.authClientCancel = context.WithTimeoutCause(log.WithContext(ctx), time.Hour, errors.New("phone login took over one hour"))
 
-	errC := make(chan error)
-	initialized := make(chan struct{})
-	go func() {
-		errC <- q.authClient.Run(q.authClientCtx, func(ctx context.Context) error {
-			close(initialized)
-			<-ctx.Done()
-			return ctx.Err()
-		})
-	}()
+	initialized := exsync.NewEvent()
+	done := NewFuture[error]()
+	runTelegramClient(q.authClientCtx, q.authClient, initialized, done, func(ctx context.Context) error {
+		<-ctx.Done()
+		return ctx.Err()
+	})
 
 	log.Info().Msg("Waiting for client to connect.")
-	select {
-	case <-initialized:
-	case err := <-errC:
+	err := initialized.Wait(ctx)
+	if err != nil {
 		return nil, err
 	}
 

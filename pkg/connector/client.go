@@ -60,19 +60,19 @@ var (
 )
 
 type TelegramClient struct {
-	main           *TelegramConnector
-	ScopedStore    *store.ScopedStore
-	telegramUserID int64
-	loginID        networkid.UserLoginID
-	userID         networkid.UserID
-	userLogin      *bridgev2.UserLogin
-	client         *telegram.Client
-	updatesManager *updates.Manager
-	clientCtx      context.Context
-	clientCancel   context.CancelFunc
-	clientDoneCh   chan error
-	initialized    chan struct{}
-	mu             sync.Mutex
+	main              *TelegramConnector
+	ScopedStore       *store.ScopedStore
+	telegramUserID    int64
+	loginID           networkid.UserLoginID
+	userID            networkid.UserID
+	userLogin         *bridgev2.UserLogin
+	client            *telegram.Client
+	updatesManager    *updates.Manager
+	clientCtx         context.Context
+	clientCancel      context.CancelFunc
+	clientDone        *Future[error]
+	clientInitialized *exsync.Event
+	mu                sync.Mutex
 
 	appConfigLock sync.Mutex
 	appConfig     map[string]any
@@ -181,7 +181,7 @@ func NewTelegramClient(ctx context.Context, tc *TelegramConnector, login *bridge
 
 		prevReactionPoll: map[networkid.PortalKey]time.Time{},
 
-		initialized: make(chan struct{}),
+		clientInitialized: exsync.NewEvent(),
 	}
 
 	if !login.Metadata.(*UserLoginMetadata).Session.HasAuthKey() {
@@ -470,7 +470,6 @@ func (t *TelegramClient) onAuthError(err error) {
 	t.sendBadCredentialsOrUnknownError(err)
 	t.userLogin.Metadata.(*UserLoginMetadata).ResetOnLogout()
 	go func() {
-		t.Disconnect()
 		if err := t.userLogin.Save(context.Background()); err != nil {
 			t.main.Bridge.Log.Err(err).Msg("failed to save user login")
 		}
@@ -499,20 +498,23 @@ func (t *TelegramClient) Connect(_ context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 	t.clientCtx = ctx
 	t.clientCancel = cancel
-	t.clientDoneCh = make(chan error)
-	initialized := sync.OnceFunc(func() {
-		close(t.initialized)
-	})
+	t.clientDone = NewFuture[error]()
+	t.clientInitialized.Clear()
 
+	runTelegramClient(ctx, t.client, t.clientInitialized, t.clientDone, func(ctx context.Context) error {
+		log.Info().Msg("Client running starting updates")
+		return t.updatesManager.Run(ctx, t.client.API(), t.telegramUserID, updates.AuthOptions{})
+	})
+}
+
+func runTelegramClient(ctx context.Context, client *telegram.Client, initialized *exsync.Event, done *Future[error], callback func(ctx context.Context) error) {
 	go func() {
-		err := t.client.Run(ctx, func(ctx context.Context) error {
-			log.Info().Msg("Client running starting updates")
-			initialized()
-			return t.updatesManager.Run(ctx, t.client.API(), t.telegramUserID, updates.AuthOptions{})
+		err := client.Run(ctx, func(ctx context.Context) error {
+			initialized.Set()
+			return callback(ctx)
 		})
-		initialized()
-		log.Info().Err(err).Msg("Client stopped")
-		t.clientDoneCh <- err
+		initialized.Set()
+		done.Set(err)
 	}()
 }
 
@@ -525,7 +527,7 @@ func (t *TelegramClient) Disconnect() {
 	if t.clientCancel != nil {
 		t.clientCancel()
 		t.userLogin.Log.Info().Msg("Waiting for client")
-		err := <-t.clientDoneCh
+		err, _ := t.clientDone.Get(context.Background())
 		t.userLogin.Log.Info().Err(err).Msg("Client done")
 	}
 

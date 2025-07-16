@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+	"go.mau.fi/util/exsync"
 	"go.mau.fi/zerozap"
 	"go.uber.org/zap"
 	"maunium.net/go/mautrix/bridgev2"
@@ -87,21 +88,16 @@ func (p *PhoneLogin) SubmitUserInput(ctx context.Context, input map[string]strin
 		})
 
 		p.authClientCtx, p.authClientCancel = context.WithTimeoutCause(log.WithContext(ctx), time.Hour, errors.New("phone login took over one hour"))
-
-		errC := make(chan error)
-		initialized := make(chan struct{})
-		go func() {
-			errC <- p.authClient.Run(p.authClientCtx, func(ctx context.Context) error {
-				close(initialized)
-				<-ctx.Done()
-				return ctx.Err()
-			})
-		}()
+		initialized := exsync.NewEvent()
+		done := NewFuture[error]()
+		runTelegramClient(p.authClientCtx, p.authClient, initialized, done, func(ctx context.Context) error {
+			<-ctx.Done()
+			return ctx.Err()
+		})
 
 		log.Info().Msg("Waiting for client to connect.")
-		select {
-		case <-initialized:
-		case err := <-errC:
+		err := initialized.Wait(ctx)
+		if err != nil {
 			return nil, err
 		}
 

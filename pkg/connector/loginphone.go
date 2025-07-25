@@ -155,7 +155,7 @@ func (p *PhoneLogin) SubmitUserInput(ctx context.Context, input map[string]strin
 		} else if errors.Is(err, auth.ErrPhoneCodeInvalid) {
 			return nil, ErrPhoneCodeInvalid
 		} else if errors.Is(err, &auth.SignUpRequired{}) {
-			return nil, fmt.Errorf("sign-up is not supported")
+			return nil, ErrSignUpNotSupported
 		} else if err != nil {
 			return nil, fmt.Errorf("failed to submit code: %w", err)
 		}

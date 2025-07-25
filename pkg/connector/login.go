@@ -50,6 +50,11 @@ var (
 		Err:        "Invalid phone code",
 		StatusCode: http.StatusBadRequest,
 	}
+	ErrSignUpNotSupported = bridgev2.RespError{
+		ErrCode:    "FI.MAU.TELEGRAM.SIGN_UP_NOT_SUPPORTED",
+		Err:        "New account creation is not supported",
+		StatusCode: http.StatusBadRequest,
+	}
 )
 
 func (tg *TelegramConnector) GetLoginFlows() []bridgev2.LoginFlow {

@@ -422,7 +422,7 @@ func (t *TelegramClient) RegisterPushNotifications(ctx context.Context, pushType
 		return fmt.Errorf("unsupported push type %s", pushType)
 	}
 	_, err := t.client.API().AccountRegisterDevice(ctx, &tg.AccountRegisterDeviceRequest{
-		NoMuted:    false,
+		NoMuted:    true,
 		TokenType:  tokenType,
 		Token:      token,
 		AppSandbox: PushAppSandbox,

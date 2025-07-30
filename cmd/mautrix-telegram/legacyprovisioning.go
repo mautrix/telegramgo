@@ -24,7 +24,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
 	"go.mau.fi/util/exhttp"
@@ -382,7 +381,7 @@ func legacyResolveIdentifierOrStartChat(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	api := login.Client.(bridgev2.IdentifierResolvingNetworkAPI)
-	identResp, err := api.ResolveIdentifier(ctx, mux.Vars(r)["identifier"], create)
+	identResp, err := api.ResolveIdentifier(ctx, r.PathValue("identifier"), create)
 	if err != nil {
 		log.Err(err).Msg("Failed to resolve identifier")
 		exhttp.WriteJSONResponse(w, http.StatusInternalServerError,

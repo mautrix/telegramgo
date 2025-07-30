@@ -286,6 +286,21 @@ func (t *TelegramClient) handleDialogs(ctx context.Context, dialogs tg.ModifiedM
 		if !res.Success {
 			return ErrFailToQueueEvent
 		}
+
+		// Generate a read receipt from the last known read message id
+		res = t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.Receipt{
+			EventMeta: simplevent.EventMeta{
+				Type:      bridgev2.RemoteEventReadReceipt,
+				PortalKey: portalKey,
+				Sender:    t.mySender(),
+			},
+			LastTarget:          ids.MakeMessageID(portalKey, dialog.ReadInboxMaxID),
+			ReadUpToStreamOrder: int64(dialog.ReadInboxMaxID),
+		})
+
+		if !res.Success {
+			return ErrFailToQueueEvent
+		}
 	}
 	return nil
 }

@@ -197,7 +197,5 @@ maunium.net/go/mauflag v1.0.0 h1:YiaRc0tEI3toYtJMRIfjP+jklH45uDHtT80nUamyD4M=
 maunium.net/go/mauflag v1.0.0/go.mod h1:nLivPOpTpHnpzEh8jEdSL9UqO9+/KBJFmNRlwKfkPeA=
 maunium.net/go/mautrix v0.24.3-0.20250717143616-0508f02a9e1c h1:UMMl9XcnFcSKKWnwq2XCOpCDcboUvus5gs0o7/oxZJY=
 maunium.net/go/mautrix v0.24.3-0.20250717143616-0508f02a9e1c/go.mod h1:1ut900w++eE9by9yqCR2dQdMqwsHwZG5L+1bKB1EvSA=
-nhooyr.io/websocket v1.8.17 h1:KEVeLJkUywCKVsnLIDlD/5gtayKp8VoCkksHCGGfT9Y=
-nhooyr.io/websocket v1.8.17/go.mod h1:rN9OFWIUwuxg4fR5tELlYC04bXYowCP9GX47ivo2l+c=
 rsc.io/qr v0.2.0 h1:6vBLea5/NRMVTz8V66gipeLycZMl/+UlFmk8DvqQ6WY=
 rsc.io/qr v0.2.0/go.mod h1:IF+uZjkb9fqyeF/4tlBoynqmQxUoPfWEKh921coOuXs=

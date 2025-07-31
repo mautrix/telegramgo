@@ -7,9 +7,9 @@ import (
 	"net"
 	"time"
 
+	"github.com/coder/websocket"
 	"github.com/go-faster/errors"
 	"go.uber.org/zap"
-	"nhooyr.io/websocket"
 
 	"go.mau.fi/mautrix-telegram/pkg/gotd/clock"
 	"go.mau.fi/mautrix-telegram/pkg/gotd/crypto"

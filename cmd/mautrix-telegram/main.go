@@ -23,7 +23,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/gorilla/mux"
 	"go.mau.fi/util/dbutil/litestream"
 	"go.mau.fi/util/exerrors"
 	"maunium.net/go/mautrix/bridgev2/bridgeconfig"
@@ -80,16 +79,16 @@ func main() {
 				return ""
 			}
 			m.Matrix.Provisioning.GetUserIDFromRequest = func(r *http.Request) id.UserID {
-				return id.UserID(mux.Vars(r)["userID"])
+				return id.UserID(r.PathValue("userID"))
 			}
 			m.Matrix.Provisioning.Router.HandleFunc("/v1/user/{userID}/login/qr", legacyProvLoginQR)
-			m.Matrix.Provisioning.Router.HandleFunc("/v1/user/{userID}/login/request_code", legacyProvLoginRequestCode)
-			m.Matrix.Provisioning.Router.HandleFunc("/v1/user/{userID}/login/send_code", legacyProvLoginSendCode)
-			m.Matrix.Provisioning.Router.HandleFunc("/v1/user/{userID}/login/send_password", legacyProvLoginSendPassword)
-			m.Matrix.Provisioning.Router.HandleFunc("/v1/user/{userID}/logout", legacyProvLogout)
-			m.Matrix.Provisioning.Router.HandleFunc("/v1/user/{userID}/contacts", legacyProvContacts)
+			m.Matrix.Provisioning.Router.HandleFunc("POST /v1/user/{userID}/login/request_code", legacyProvLoginRequestCode)
+			m.Matrix.Provisioning.Router.HandleFunc("POST /v1/user/{userID}/login/send_code", legacyProvLoginSendCode)
+			m.Matrix.Provisioning.Router.HandleFunc("POST /v1/user/{userID}/login/send_password", legacyProvLoginSendPassword)
+			m.Matrix.Provisioning.Router.HandleFunc("POST /v1/user/{userID}/logout", legacyProvLogout)
+			m.Matrix.Provisioning.Router.HandleFunc("GET /v1/user/{userID}/contacts", legacyProvContacts)
 			m.Matrix.Provisioning.Router.HandleFunc("/v1/user/{userID}/resolve_identifier/{identifier}", legacyProvResolveIdentifier)
-			m.Matrix.Provisioning.Router.HandleFunc("/v1/user/{userID}/pm/{identifier}", legacyProvPM)
+			m.Matrix.Provisioning.Router.HandleFunc("POST /v1/user/{userID}/pm/{identifier}", legacyProvPM)
 		}
 	}
 	m.PostInit = func() {

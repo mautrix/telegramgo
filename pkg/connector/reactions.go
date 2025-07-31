@@ -135,7 +135,8 @@ func (t *TelegramClient) handleTelegramReactions(ctx context.Context, msg *tg.Me
 
 		emojiID, emoji, err := computeEmojiAndID(reaction.Reaction, customEmojis)
 		if err != nil {
-			return fmt.Errorf("failed to compute emoji and ID: %w", err)
+			log.Err(err).Msg("Failed to compute emoji and ID for reaction")
+			continue
 		}
 
 		users[userID].Reactions = append(users[userID].Reactions, &bridgev2.BackfillReaction{
@@ -158,11 +159,7 @@ func (t *TelegramClient) handleTelegramReactions(ctx context.Context, msg *tg.Me
 		Reactions:     &bridgev2.ReactionSyncData{Users: users, HasAllUsers: isFull},
 	})
 
-	if !res.Success {
-		return ErrFailToQueueEvent
-	}
-
-	return nil
+	return resultToError(res)
 }
 
 func splitDMReactionCounts(res []tg.ReactionCount, theirUserID, myUserID int64) (reactions []tg.MessagePeerReaction) {
@@ -301,8 +298,8 @@ func (t *TelegramClient) pollForReactions(ctx context.Context, portalKey network
 				TargetMessage: dbMsg.ID,
 				Reactions:     &bridgev2.ReactionSyncData{Users: users, HasAllUsers: isFull},
 			})
-			if !res.Success {
-				return ErrFailToQueueEvent
+			if err := resultToError(res); err != nil {
+				return err
 			}
 		} else {
 			log.Warn().Type("update_type", update).Msg("Unexpected update type in get reactions response")

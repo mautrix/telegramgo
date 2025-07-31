@@ -158,11 +158,7 @@ func (t *TelegramClient) handleTelegramReactions(ctx context.Context, msg *tg.Me
 		Reactions:     &bridgev2.ReactionSyncData{Users: users, HasAllUsers: isFull},
 	})
 
-	if !res.Success {
-		return ErrFailToQueueEvent
-	}
-
-	return nil
+	return resultToError(res)
 }
 
 func splitDMReactionCounts(res []tg.ReactionCount, theirUserID, myUserID int64) (reactions []tg.MessagePeerReaction) {
@@ -301,8 +297,8 @@ func (t *TelegramClient) pollForReactions(ctx context.Context, portalKey network
 				TargetMessage: dbMsg.ID,
 				Reactions:     &bridgev2.ReactionSyncData{Users: users, HasAllUsers: isFull},
 			})
-			if !res.Success {
-				return ErrFailToQueueEvent
+			if err := resultToError(res); err != nil {
+				return err
 			}
 		} else {
 			log.Warn().Type("update_type", update).Msg("Unexpected update type in get reactions response")

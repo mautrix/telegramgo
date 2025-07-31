@@ -67,10 +67,7 @@ func (t *TelegramClient) selfLeaveChat(portalKey networkid.PortalKey) error {
 		},
 		OnlyForMe: true,
 	})
-	if !res.Success {
-		return ErrFailToQueueEvent
-	}
-	return nil
+	return resultToError(res)
 }
 
 func (t *TelegramClient) onUpdateChannel(ctx context.Context, e tg.Entities, update *tg.UpdateChannel) error {
@@ -162,8 +159,8 @@ func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, entities tg.Ent
 			ConvertMessageFunc: t.convertToMatrixWithRefetch,
 		})
 
-		if !res.Success {
-			return ErrFailToQueueEvent
+		if err := resultToError(res); err != nil {
+			return err
 		}
 
 		return t.handleTelegramReactions(ctx, msg)
@@ -190,8 +187,8 @@ func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, entities tg.Ent
 				EventMeta:      eventMeta.WithType(bridgev2.RemoteEventChatInfoChange),
 				ChatInfoChange: &bridgev2.ChatInfoChange{ChatInfo: &bridgev2.ChatInfo{Name: &action.Title}},
 			})
-			if !res.Success {
-				return ErrFailToQueueEvent
+			if err := resultToError(res); err != nil {
+				return err
 			}
 		case *tg.MessageActionChatEditPhoto:
 			switch peer := msg.PeerID.(type) {
@@ -200,16 +197,16 @@ func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, entities tg.Ent
 					EventMeta:      eventMeta.WithType(bridgev2.RemoteEventChatInfoChange),
 					ChatInfoChange: &bridgev2.ChatInfoChange{ChatInfo: &bridgev2.ChatInfo{Avatar: t.avatarFromPhoto(ctx, ids.PeerTypeChat, peer.ChatID, action.Photo)}},
 				})
-				if !res.Success {
-					return ErrFailToQueueEvent
+				if err := resultToError(res); err != nil {
+					return err
 				}
 			case *tg.PeerChannel:
 				res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatInfoChange{
 					EventMeta:      eventMeta.WithType(bridgev2.RemoteEventChatInfoChange),
 					ChatInfoChange: &bridgev2.ChatInfoChange{ChatInfo: &bridgev2.ChatInfo{Avatar: t.avatarFromPhoto(ctx, ids.PeerTypeChannel, peer.ChannelID, action.Photo)}},
 				})
-				if !res.Success {
-					return ErrFailToQueueEvent
+				if err := resultToError(res); err != nil {
+					return err
 				}
 			}
 
@@ -218,8 +215,8 @@ func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, entities tg.Ent
 				EventMeta:      eventMeta.WithType(bridgev2.RemoteEventChatInfoChange),
 				ChatInfoChange: &bridgev2.ChatInfoChange{ChatInfo: &bridgev2.ChatInfo{Avatar: &bridgev2.Avatar{Remove: true}}},
 			})
-			if !res.Success {
-				return ErrFailToQueueEvent
+			if err := resultToError(res); err != nil {
+				return err
 			}
 		case *tg.MessageActionChatAddUser:
 			memberChanges := &bridgev2.ChatMemberList{
@@ -235,8 +232,8 @@ func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, entities tg.Ent
 				EventMeta:      eventMeta.WithType(bridgev2.RemoteEventChatInfoChange),
 				ChatInfoChange: &bridgev2.ChatInfoChange{MemberChanges: memberChanges},
 			})
-			if !res.Success {
-				return ErrFailToQueueEvent
+			if err := resultToError(res); err != nil {
+				return err
 			}
 		case *tg.MessageActionChatJoinedByLink:
 			res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatInfoChange{
@@ -249,8 +246,8 @@ func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, entities tg.Ent
 					},
 				},
 			})
-			if !res.Success {
-				return ErrFailToQueueEvent
+			if err := resultToError(res); err != nil {
+				return err
 			}
 		case *tg.MessageActionChatDeleteUser:
 			if action.UserID == t.telegramUserID {
@@ -269,8 +266,8 @@ func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, entities tg.Ent
 					},
 				},
 			})
-			if !res.Success {
-				return ErrFailToQueueEvent
+			if err := resultToError(res); err != nil {
+				return err
 			}
 		case *tg.MessageActionChatCreate:
 			memberMap := map[networkid.UserID]bridgev2.ChatMember{}
@@ -295,8 +292,8 @@ func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, entities tg.Ent
 					CanBackfill: true,
 				},
 			})
-			if !res.Success {
-				return ErrFailToQueueEvent
+			if err := resultToError(res); err != nil {
+				return err
 			}
 			res = t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.Message[any]{
 				EventMeta: eventMeta.WithType(bridgev2.RemoteEventMessage),
@@ -312,8 +309,8 @@ func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, entities tg.Ent
 					}, nil
 				},
 			})
-			if !res.Success {
-				return ErrFailToQueueEvent
+			if err := resultToError(res); err != nil {
+				return err
 			}
 
 		case *tg.MessageActionChannelCreate:
@@ -339,8 +336,8 @@ func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, entities tg.Ent
 					CanBackfill: true,
 				},
 			})
-			if !res.Success {
-				return ErrFailToQueueEvent
+			if err := resultToError(res); err != nil {
+				return err
 			}
 			res = t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.Message[any]{
 				EventMeta: eventMeta.WithType(bridgev2.RemoteEventMessage),
@@ -356,8 +353,8 @@ func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, entities tg.Ent
 					}, nil
 				},
 			})
-			if !res.Success {
-				return ErrFailToQueueEvent
+			if err := resultToError(res); err != nil {
+				return err
 			}
 		case *tg.MessageActionSetMessagesTTL:
 			res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatResync{
@@ -370,8 +367,8 @@ func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, entities tg.Ent
 					},
 				},
 			})
-			if !res.Success {
-				return ErrFailToQueueEvent
+			if err := resultToError(res); err != nil {
+				return err
 			}
 
 			// Send a notice about the TTL change
@@ -387,8 +384,8 @@ func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, entities tg.Ent
 					}, nil
 				},
 			})
-			if !res.Success {
-				return ErrFailToQueueEvent
+			if err := resultToError(res); err != nil {
+				return err
 			}
 		case *tg.MessageActionPhoneCall:
 			var body strings.Builder
@@ -430,8 +427,8 @@ func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, entities tg.Ent
 					}, nil
 				},
 			})
-			if !res.Success {
-				return ErrFailToQueueEvent
+			if err := resultToError(res); err != nil {
+				return err
 			}
 		case *tg.MessageActionGroupCall:
 			var body strings.Builder
@@ -458,8 +455,8 @@ func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, entities tg.Ent
 					}, nil
 				},
 			})
-			if !res.Success {
-				return ErrFailToQueueEvent
+			if err := resultToError(res); err != nil {
+				return err
 			}
 		case *tg.MessageActionInviteToGroupCall:
 			var body, html strings.Builder
@@ -508,8 +505,8 @@ func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, entities tg.Ent
 					}, nil
 				},
 			})
-			if !res.Success {
-				return ErrFailToQueueEvent
+			if err := resultToError(res); err != nil {
+				return err
 			}
 		case *tg.MessageActionGroupCallScheduled:
 			start := time.Unix(int64(action.ScheduleDate), 0)
@@ -532,8 +529,8 @@ func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, entities tg.Ent
 					}, nil
 				},
 			})
-			if !res.Success {
-				return ErrFailToQueueEvent
+			if err := resultToError(res); err != nil {
+				return err
 			}
 
 		// case *tg.MessageActionChatMigrateTo:
@@ -728,8 +725,8 @@ func (t *TelegramClient) onDeleteMessages(ctx context.Context, channelID int64, 
 			},
 			TargetMessage: ids.MakeMessageID(channelID, messageID),
 		})
-		if !res.Success {
-			return ErrFailToQueueEvent
+		if err := resultToError(res); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -884,11 +881,7 @@ func (t *TelegramClient) onMessageEdit(ctx context.Context, update IGetMessage) 
 			return &ce, nil
 		},
 	})
-	if !res.Success {
-		return ErrFailToQueueEvent
-	}
-
-	return nil
+	return resultToError(res)
 }
 
 func (t *TelegramClient) handleTyping(portal networkid.PortalKey, sender bridgev2.EventSender, action tg.SendMessageActionClass) error {
@@ -908,10 +901,7 @@ func (t *TelegramClient) handleTyping(portal networkid.PortalKey, sender bridgev
 		},
 		Timeout: timeout,
 	})
-	if !res.Success {
-		return ErrFailToQueueEvent
-	}
-	return nil
+	return resultToError(res)
 }
 
 func (t *TelegramClient) updateReadReceipt(ctx context.Context, e tg.Entities, update *tg.UpdateReadHistoryOutbox) error {
@@ -933,10 +923,7 @@ func (t *TelegramClient) updateReadReceipt(ctx context.Context, e tg.Entities, u
 		LastTarget:          ids.MakeMessageID(update.Peer, update.MaxID),
 		ReadUpToStreamOrder: int64(update.MaxID),
 	})
-	if !res.Success {
-		return ErrFailToQueueEvent
-	}
-	return nil
+	return resultToError(res)
 }
 
 func (t *TelegramClient) onOwnReadReceipt(portalKey networkid.PortalKey, maxID int) error {
@@ -949,10 +936,7 @@ func (t *TelegramClient) onOwnReadReceipt(portalKey networkid.PortalKey, maxID i
 		LastTarget:          ids.MakeMessageID(portalKey, maxID),
 		ReadUpToStreamOrder: int64(maxID),
 	})
-	if !res.Success {
-		return ErrFailToQueueEvent
-	}
-	return nil
+	return resultToError(res)
 }
 
 func (t *TelegramClient) inputPeerForPortalID(ctx context.Context, portalID networkid.PortalID) (tg.InputPeerClass, error) {
@@ -1138,10 +1122,7 @@ func (t *TelegramClient) onNotifySettings(ctx context.Context, e tg.Entities, up
 			PortalKey: t.makePortalKeyFromPeer(update.Peer.(*tg.NotifyPeer).Peer),
 		},
 	})
-	if !res.Success {
-		return ErrFailToQueueEvent
-	}
-	return nil
+	return resultToError(res)
 }
 
 func (t *TelegramClient) HandleMute(ctx context.Context, msg *bridgev2.MatrixMute) error {
@@ -1194,8 +1175,8 @@ func (t *TelegramClient) onPinnedDialogs(ctx context.Context, e tg.Entities, msg
 				PortalKey: portalKey,
 			},
 		})
-		if !res.Success {
-			return ErrFailToQueueEvent
+		if err := resultToError(res); err != nil {
+			return err
 		}
 	}
 
@@ -1213,8 +1194,8 @@ func (t *TelegramClient) onPinnedDialogs(ctx context.Context, e tg.Entities, msg
 				PortalKey: portalKey,
 			},
 		})
-		if !res.Success {
-			return ErrFailToQueueEvent
+		if err := resultToError(res); err != nil {
+			return err
 		}
 	}
 
@@ -1247,10 +1228,7 @@ func (t *TelegramClient) onChatDefaultBannedRights(ctx context.Context, entities
 			PortalKey: t.makePortalKeyFromPeer(update.Peer),
 		},
 	})
-	if !res.Success {
-		return ErrFailToQueueEvent
-	}
-	return nil
+	return resultToError(res)
 }
 
 func (t *TelegramClient) onPeerBlocked(ctx context.Context, e tg.Entities, update *tg.UpdatePeerBlocked) error {
@@ -1287,10 +1265,7 @@ func (t *TelegramClient) onPeerBlocked(ctx context.Context, e tg.Entities, updat
 			PortalKey: t.makePortalKeyFromPeer(update.PeerID),
 		},
 	})
-	if !res.Success {
-		return ErrFailToQueueEvent
-	}
-	return nil
+	return resultToError(res)
 }
 
 func (t *TelegramClient) onChat(ctx context.Context, e tg.Entities, update *tg.UpdateChat) error {
@@ -1333,8 +1308,5 @@ func (t *TelegramClient) onPhoneCall(ctx context.Context, e tg.Entities, update 
 			}, nil
 		},
 	})
-	if !res.Success {
-		return ErrFailToQueueEvent
-	}
-	return nil
+	return resultToError(res)
 }

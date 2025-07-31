@@ -59,6 +59,16 @@ var (
 	ErrFailToQueueEvent = errors.New("failed to queue event")
 )
 
+func resultToError(res bridgev2.EventHandlingResult) error {
+	if !res.Success {
+		if res.Error != nil {
+			return fmt.Errorf("%w: %w", ErrFailToQueueEvent, res.Error)
+		}
+		return ErrFailToQueueEvent
+	}
+	return nil
+}
+
 type TelegramClient struct {
 	main              *TelegramConnector
 	ScopedStore       *store.ScopedStore
@@ -252,10 +262,7 @@ func NewTelegramClient(ctx context.Context, tc *TelegramConnector, login *bridge
 				CheckNeedsBackfillFunc: func(ctx context.Context, latestMessage *database.Message) (bool, error) { return true, nil },
 			})
 
-			if !res.Success {
-				return ErrFailToQueueEvent
-			}
-			return nil
+			return resultToError(res)
 		},
 		Handler:      dispatcher,
 		Logger:       zaplog.Named("gaps"),

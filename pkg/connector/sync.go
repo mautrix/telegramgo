@@ -283,8 +283,8 @@ func (t *TelegramClient) handleDialogs(ctx context.Context, dialogs tg.ModifiedM
 			},
 		})
 
-		if !res.Success {
-			return ErrFailToQueueEvent
+		if err = resultToError(res); err != nil {
+			return err
 		}
 	}
 	return nil

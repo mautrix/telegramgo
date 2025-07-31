@@ -92,9 +92,9 @@ func (t *TelegramClient) onUpdateChannel(ctx context.Context, e tg.Entities, upd
 		if tgerr.Is(err, tg.ErrChannelInvalid, tg.ErrChannelPrivate) {
 			return t.selfLeaveChat(portalKey)
 		}
-		return fmt.Errorf("failed to get channel: %w", err)
+		log.Err(err).Msg("Failed to get channel info after UpdateChannel event")
 	} else if len(chats.GetChats()) != 1 {
-		return fmt.Errorf("expected 1 chat, got %d", len(chats.GetChats()))
+		log.Warn().Int("chat_count", len(chats.GetChats())).Msg("Got more than 1 chat in GetChannels response")
 	} else if channel, ok := chats.GetChats()[0].(*tg.Channel); !ok {
 		log.Error().Type("chat_type", chats.GetChats()[0]).Msg("Expected channel, got something else. Leaving the channel.")
 		return t.selfLeaveChat(portalKey)
@@ -404,7 +404,8 @@ func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, entities tg.Ent
 			case tg.PhoneCallDiscardReasonBusyTypeID:
 				body.WriteString("rejected")
 			default:
-				return fmt.Errorf("unknown call end reason %T", action.Reason)
+				log.Warn().Stringer("end_reason", action.Reason).Msg("Unknown call end reason")
+				return nil
 			}
 
 			if action.Duration > 0 {
@@ -1236,7 +1237,8 @@ func (t *TelegramClient) onPeerBlocked(ctx context.Context, e tg.Entities, updat
 	if peer, ok := update.PeerID.(*tg.PeerUser); ok {
 		userID = ids.MakeUserID(peer.UserID)
 	} else {
-		return fmt.Errorf("unexpected peer type in peer blocked update %T", update.PeerID)
+		zerolog.Ctx(ctx).Warn().Type("peer_type", update.PeerID).Msg("Unexpected peer type in peer blocked update")
+		return nil
 	}
 
 	// Update the ghost
@@ -1279,7 +1281,8 @@ func (t *TelegramClient) onPhoneCall(ctx context.Context, e tg.Entities, update 
 		log.Info().Type("type", update.PhoneCall).Msg("Unhandled phone call update class")
 		return nil
 	} else if call.ParticipantID != t.telegramUserID {
-		return fmt.Errorf("received phone call for user that is not us")
+		log.Warn().Msg("Received phone call for user that is not us")
+		return nil
 	}
 
 	var body strings.Builder

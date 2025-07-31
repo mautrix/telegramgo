@@ -135,7 +135,8 @@ func (t *TelegramClient) handleTelegramReactions(ctx context.Context, msg *tg.Me
 
 		emojiID, emoji, err := computeEmojiAndID(reaction.Reaction, customEmojis)
 		if err != nil {
-			return fmt.Errorf("failed to compute emoji and ID: %w", err)
+			log.Err(err).Msg("Failed to compute emoji and ID for reaction")
+			continue
 		}
 
 		users[userID].Reactions = append(users[userID].Reactions, &bridgev2.BackfillReaction{

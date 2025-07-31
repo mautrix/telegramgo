@@ -298,8 +298,8 @@ func (t *TelegramClient) handleDialogs(ctx context.Context, dialogs tg.ModifiedM
 			ReadUpToStreamOrder: int64(dialog.ReadInboxMaxID),
 		})
 
-		if !res.Success {
-			return ErrFailToQueueEvent
+		if err = resultToError(res); err != nil {
+			return err
 		}
 	}
 	return nil

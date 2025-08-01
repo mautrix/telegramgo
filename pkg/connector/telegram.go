@@ -534,8 +534,46 @@ func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, entities tg.Ent
 				return err
 			}
 
-		// case *tg.MessageActionChatMigrateTo:
-		// case *tg.MessageActionChannelMigrateFrom:
+		case *tg.MessageActionChatMigrateTo:
+			log.Debug().Int64("channel_id", action.ChannelID).Msg("MessageActionChatMigrateTo")
+			newPortalKey := t.makePortalKeyFromID(ids.PeerTypeChannel, action.ChannelID)
+			if err := t.migrateChat(ctx, eventMeta.PortalKey, newPortalKey); err != nil {
+				log.Err(err).Msg("Failed to migrate chat to channel")
+				return err
+			}
+			res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.Message[any]{
+				EventMeta: eventMeta.
+					WithPortalKey(newPortalKey).
+					WithStreamOrder(0).
+					WithType(bridgev2.RemoteEventMessage).
+					WithSender(bridgev2.EventSender{}),
+				ID: ids.GetMessageIDFromMessage(msg),
+				ConvertMessageFunc: func(ctx context.Context, portal *bridgev2.Portal, intent bridgev2.MatrixAPI, data any) (*bridgev2.ConvertedMessage, error) {
+					return &bridgev2.ConvertedMessage{
+						Parts: []*bridgev2.ConvertedMessagePart{
+							{
+								Type: event.EventMessage,
+								Content: &event.MessageEventContent{
+									MsgType: event.MsgNotice,
+									Body:    "migrated to a supergroup",
+								},
+							},
+						},
+					}, nil
+				},
+			})
+			if err := resultToError(res); err != nil {
+				return err
+			}
+
+		case *tg.MessageActionChannelMigrateFrom:
+			log.Debug().Int64("chat_id", action.ChatID).Msg("MessageActionChannelMigrateFrom")
+			oldID := t.makePortalKeyFromID(ids.PeerTypeChat, action.ChatID)
+			if err := t.migrateChat(ctx, oldID, eventMeta.PortalKey); err != nil {
+				log.Err(err).Msg("Failed to migrate channel to chat")
+				return err
+			}
+
 		// case *tg.MessageActionPinMessage:
 		// case *tg.MessageActionHistoryClear:
 		// case *tg.MessageActionGameScore:
@@ -575,6 +613,94 @@ func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, entities tg.Ent
 			Type("action_type", msg).
 			Msg("ignoring unknown message type")
 		return nil
+	}
+	return nil
+}
+
+func (t *TelegramClient) migrateChat(ctx context.Context, oldPortalKey, newPortalKey networkid.PortalKey) error {
+	log := zerolog.Ctx(ctx).With().
+		Str("handler", "migrate_chat").
+		Stringer("old_portal_key", oldPortalKey).
+		Stringer("new_portal_key", newPortalKey).
+		Logger()
+
+	if t.main.Config.AlwaysTombstoneOnSupergroupMigration {
+		return t.migrateChatAndTombstone(ctx, oldPortalKey, newPortalKey)
+	}
+
+	result, portal, err := t.main.Bridge.ReIDPortal(ctx, oldPortalKey, newPortalKey)
+	if err != nil {
+		log.Err(err).Msg("Failed to re-ID portal after chat migration")
+		return err
+	} else if result == bridgev2.ReIDResultSourceReIDd || result == bridgev2.ReIDResultTargetDeletedAndSourceReIDd {
+		// If the source portal is re-ID'd, we need to sync metadata and participants.
+		// If the source is deleted, then it doesn't matter, any existing target will already be correct
+		info, err := t.GetChatInfo(ctx, portal)
+		if err != nil {
+			log.Err(err).Msg("Failed to get chat info to update portal after re-ID")
+			return err
+		}
+		portal.UpdateInfo(ctx, info, t.userLogin, nil, time.Time{})
+	}
+	return nil
+}
+
+func (t *TelegramClient) migrateChatAndTombstone(ctx context.Context, oldPortalKey, newPortalKey networkid.PortalKey) error {
+	log := zerolog.Ctx(ctx).With().
+		Str("handler", "migrate_chat_and_tombstone").
+		Stringer("old_portal_key", oldPortalKey).
+		Stringer("new_portal_key", newPortalKey).
+		Logger()
+	oldPortal, err := t.main.Bridge.GetPortalByKey(ctx, oldPortalKey)
+	if err != nil {
+		log.Err(err).Msg("Failed to get old portal for chat migration")
+		return err
+	} else if oldPortal == nil {
+		return fmt.Errorf("old portal not found for chat migration: %s", oldPortalKey)
+	} else if oldPortal.MXID == "" {
+		log.Warn().Msg("Old portal has no MXID, cannot send tombstone")
+		return fmt.Errorf("old portal has no MXID, cannot send tombstone: %s", oldPortalKey)
+	}
+	newPortal, err := t.main.Bridge.GetPortalByKey(ctx, newPortalKey)
+	if err != nil {
+		log.Err(err).Msg("Failed to get new portal for chat migration")
+		return err
+	} else if newPortal == nil {
+		log.Warn().Msg("New portal not found for chat migration")
+		return fmt.Errorf("new portal not found for chat migration: %s", newPortalKey)
+	} else if newPortal.MXID != "" {
+		log.Warn().Msg("New portal already has an MXID, not creating a new room")
+		return nil
+	}
+
+	info, err := t.GetChatInfo(ctx, newPortal)
+	if err != nil {
+		log.Err(err).Msg("Failed to get chat info for new portal after migration")
+		return err
+	} else if info == nil {
+		log.Warn().Msg("Chat info for new portal after migration is nil, creating empty room")
+		return fmt.Errorf("chat info for new portal after migration is nil: %s", newPortalKey)
+	}
+
+	if err = newPortal.CreateMatrixRoom(ctx, t.userLogin, info); err != nil {
+		log.Err(err).Msg("Failed to create Matrix room for new portal after migration")
+		return err
+	}
+
+	_, err = t.main.Bridge.Bot.SendState(ctx, oldPortal.MXID, event.StateTombstone, "", &event.Content{
+		Parsed: &event.TombstoneEventContent{
+			Body:            "This room has been merged",
+			ReplacementRoom: newPortal.MXID,
+		},
+	}, time.Now())
+	if err != nil {
+		log.Err(err).Msg("Failed to send tombstone state after chat migration")
+		return err
+	}
+	err = t.main.Bridge.Bot.DeleteRoom(ctx, oldPortal.MXID, err == nil)
+	if err != nil {
+		log.Err(err).Msg("Failed to delete old portal after chat migration")
+		return err
 	}
 	return nil
 }

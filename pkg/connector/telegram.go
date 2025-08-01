@@ -534,8 +534,24 @@ func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, entities tg.Ent
 				return err
 			}
 
-		// case *tg.MessageActionChatMigrateTo:
-		// case *tg.MessageActionChannelMigrateFrom:
+		case *tg.MessageActionChatMigrateTo:
+			log.Debug().Int64("channel_id", action.ChannelID).Msg("MessageActionChatMigrateTo")
+			newID := t.makePortalKeyFromID(ids.PeerTypeChannel, action.ChannelID)
+			err := t.migrateChat(ctx, eventMeta.PortalKey, newID)
+			if err != nil {
+				log.Err(err).Msg("Failed to migrate chat to channel")
+				return err
+			}
+
+		case *tg.MessageActionChannelMigrateFrom:
+			log.Debug().Int64("chat_id", action.ChatID).Msg("MessageActionChannelMigrateFrom")
+			oldID := t.makePortalKeyFromID(ids.PeerTypeChat, action.ChatID)
+			err := t.migrateChat(ctx, oldID, eventMeta.PortalKey)
+			if err != nil {
+				log.Err(err).Msg("Failed to migrate channel to chat")
+				return err
+			}
+
 		// case *tg.MessageActionPinMessage:
 		// case *tg.MessageActionHistoryClear:
 		// case *tg.MessageActionGameScore:
@@ -575,6 +591,28 @@ func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, entities tg.Ent
 			Type("action_type", msg).
 			Msg("ignoring unknown message type")
 		return nil
+	}
+	return nil
+}
+
+func (t *TelegramClient) migrateChat(ctx context.Context, oldPortalKey, newPortalKey networkid.PortalKey) error {
+	log := zerolog.Ctx(ctx).With().
+		Str("handler", "migrate_chat").
+		Stringer("old_portal_key", oldPortalKey).
+		Stringer("new_portal_key", newPortalKey).
+		Logger()
+	result, portal, err := t.main.Bridge.ReIDPortal(ctx, oldPortalKey, newPortalKey)
+	log.Debug().Msgf("Re-ID result: %v", result)
+	if err != nil {
+		log.Err(err).Msg("Failed to re-ID portal after chat migration")
+		return err
+	} else if result == bridgev2.ReIDResultSourceReIDd || result == bridgev2.ReIDResultTargetDeletedAndSourceReIDd {
+		info, err := t.GetChatInfo(ctx, portal)
+		if err != nil {
+			log.Err(err).Msg("Failed to get chat info after chat migration")
+			return err
+		}
+		portal.UpdateInfo(ctx, info, t.userLogin, nil, time.Time{})
 	}
 	return nil
 }

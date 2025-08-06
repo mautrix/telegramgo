@@ -534,8 +534,39 @@ func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, entities tg.Ent
 				return err
 			}
 
-		// case *tg.MessageActionChatMigrateTo:
+		case *tg.MessageActionChatMigrateTo:
+			log.Debug().Int64("channel_id", action.ChannelID).Msg("MessageActionChatMigrateTo")
+			newPortalKey := t.makePortalKeyFromID(ids.PeerTypeChannel, action.ChannelID)
+			if err := t.migrateChat(ctx, eventMeta.PortalKey, newPortalKey); err != nil {
+				log.Err(err).Msg("Failed to migrate chat to channel")
+				return err
+			}
+			res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.Message[any]{
+				EventMeta: eventMeta.
+					WithPortalKey(newPortalKey).
+					WithStreamOrder(0).
+					WithType(bridgev2.RemoteEventMessage),
+				ID: ids.GetMessageIDFromMessage(msg),
+				ConvertMessageFunc: func(ctx context.Context, portal *bridgev2.Portal, intent bridgev2.MatrixAPI, data any) (*bridgev2.ConvertedMessage, error) {
+					return &bridgev2.ConvertedMessage{
+						Parts: []*bridgev2.ConvertedMessagePart{
+							{
+								Type: event.EventMessage,
+								Content: &event.MessageEventContent{
+									MsgType: event.MsgNotice,
+									Body:    "Upgraded this group to a supergroup",
+								},
+							},
+						},
+					}, nil
+				},
+			})
+			if err := resultToError(res); err != nil {
+				return err
+			}
+
 		// case *tg.MessageActionChannelMigrateFrom:
+
 		// case *tg.MessageActionPinMessage:
 		// case *tg.MessageActionHistoryClear:
 		// case *tg.MessageActionGameScore:
@@ -575,6 +606,37 @@ func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, entities tg.Ent
 			Type("action_type", msg).
 			Msg("ignoring unknown message type")
 		return nil
+	}
+	return nil
+}
+
+func (t *TelegramClient) migrateChat(ctx context.Context, oldPortalKey, newPortalKey networkid.PortalKey) error {
+	if t.main.Config.AlwaysTombstoneOnSupergroupMigration {
+		newPortal, err := t.main.Bridge.GetPortalByKey(ctx, newPortalKey)
+		if err != nil {
+			return fmt.Errorf("failed to get new portal for chat migration: %w", err)
+		}
+		info, err := t.GetChatInfo(ctx, newPortal)
+		if err != nil {
+			return fmt.Errorf("failed to get chat info for new portal: %w", err)
+		}
+		err = newPortal.CreateMatrixRoom(ctx, t.userLogin, info)
+		if err != nil {
+			return fmt.Errorf("failed to create Matrix room for new portal: %w", err)
+		}
+	}
+
+	result, portal, err := t.main.Bridge.ReIDPortal(ctx, oldPortalKey, newPortalKey)
+	if err != nil {
+		return fmt.Errorf("failed to re-ID portal: %w", err)
+	} else if result == bridgev2.ReIDResultSourceReIDd || result == bridgev2.ReIDResultTargetDeletedAndSourceReIDd {
+		// If the source portal is re-ID'd, we need to sync metadata and participants.
+		// If the source is deleted, then it doesn't matter, any existing target will already be correct
+		info, err := t.GetChatInfo(ctx, portal)
+		if err != nil {
+			return fmt.Errorf("failed to get chat info for new portal: %w", err)
+		}
+		portal.UpdateInfo(ctx, info, t.userLogin, nil, time.Time{})
 	}
 	return nil
 }

@@ -620,7 +620,10 @@ func (t *TelegramClient) migrateChat(ctx context.Context, oldPortalKey, newPorta
 		if err != nil {
 			return fmt.Errorf("failed to get chat info for new portal: %w", err)
 		}
-		newPortal.CreateMatrixRoom(ctx, t.userLogin, info)
+		err = newPortal.CreateMatrixRoom(ctx, t.userLogin, info)
+		if err != nil {
+			return fmt.Errorf("failed to create Matrix room for new portal: %w", err)
+		}
 	}
 
 	result, portal, err := t.main.Bridge.ReIDPortal(ctx, oldPortalKey, newPortalKey)

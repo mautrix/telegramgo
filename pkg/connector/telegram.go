@@ -554,7 +554,7 @@ func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, entities tg.Ent
 								Type: event.EventMessage,
 								Content: &event.MessageEventContent{
 									MsgType: event.MsgNotice,
-									Body:    "upgraded this group to a supergroup",
+									Body:    "Upgraded this group to a supergroup",
 								},
 							},
 						},

@@ -554,7 +554,7 @@ func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, entities tg.Ent
 								Type: event.EventMessage,
 								Content: &event.MessageEventContent{
 									MsgType: event.MsgNotice,
-									Body:    "migrated to a supergroup",
+									Body:    "upgraded this group to a supergroup",
 								},
 							},
 						},
@@ -611,37 +611,27 @@ func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, entities tg.Ent
 }
 
 func (t *TelegramClient) migrateChat(ctx context.Context, oldPortalKey, newPortalKey networkid.PortalKey) error {
-	log := zerolog.Ctx(ctx).With().
-		Str("handler", "migrate_chat").
-		Stringer("old_portal_key", oldPortalKey).
-		Stringer("new_portal_key", newPortalKey).
-		Logger()
-
 	if t.main.Config.AlwaysTombstoneOnSupergroupMigration {
 		newPortal, err := t.main.Bridge.GetPortalByKey(ctx, newPortalKey)
 		if err != nil {
-			log.Err(err).Msg("Failed to get new portal for chat migration")
-			return err
+			return fmt.Errorf("failed to get new portal for chat migration: %w", err)
 		}
 		info, err := t.GetChatInfo(ctx, newPortal)
 		if err != nil {
-			log.Err(err).Msg("Failed to get chat info for new portal after migration")
-			return err
+			return fmt.Errorf("failed to get chat info for new portal: %w", err)
 		}
 		newPortal.CreateMatrixRoom(ctx, t.userLogin, info)
 	}
 
 	result, portal, err := t.main.Bridge.ReIDPortal(ctx, oldPortalKey, newPortalKey)
 	if err != nil {
-		log.Err(err).Msg("Failed to re-ID portal after chat migration")
-		return err
+		return fmt.Errorf("failed to re-ID portal: %w", err)
 	} else if result == bridgev2.ReIDResultSourceReIDd || result == bridgev2.ReIDResultTargetDeletedAndSourceReIDd {
 		// If the source portal is re-ID'd, we need to sync metadata and participants.
 		// If the source is deleted, then it doesn't matter, any existing target will already be correct
 		info, err := t.GetChatInfo(ctx, portal)
 		if err != nil {
-			log.Err(err).Msg("Failed to get chat info to update portal after re-ID")
-			return err
+			return fmt.Errorf("failed to get chat info for new portal: %w", err)
 		}
 		portal.UpdateInfo(ctx, info, t.userLogin, nil, time.Time{})
 	}

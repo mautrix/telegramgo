@@ -716,3 +716,24 @@ func (t *TelegramClient) HandleMatrixTyping(ctx context.Context, msg *bridgev2.M
 	})
 	return err
 }
+
+func (t *TelegramClient) HandleMatrixDisappearingTimer(ctx context.Context, msg *bridgev2.MatrixDisappearingTimer) (bool, error) {
+	inputPeer, err := t.inputPeerForPortalID(ctx, msg.Portal.ID)
+	if err != nil {
+		return false, err
+	}
+	_, err = t.client.API().MessagesSetHistoryTTL(ctx, &tg.MessagesSetHistoryTTLRequest{
+		Peer:   inputPeer,
+		Period: int(msg.Content.Timer.Seconds()),
+	})
+	if err == nil {
+		msg.Portal.Disappear = database.DisappearingSetting{
+			Type:  event.DisappearingTypeAfterRead,
+			Timer: msg.Content.Timer.Duration,
+		}
+		if msg.Portal.Disappear.Timer == 0 {
+			msg.Portal.Disappear.Type = event.DisappearingTypeNone
+		}
+	}
+	return err == nil, err
+}

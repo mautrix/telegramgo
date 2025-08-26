@@ -20,7 +20,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"time"
 
+	"go.mau.fi/util/jsontime"
 	"go.mau.fi/util/ptr"
 	"go.mau.fi/util/variationselector"
 	"maunium.net/go/mautrix/bridgev2"
@@ -34,7 +36,7 @@ func (tg *TelegramConnector) GetCapabilities() *bridgev2.NetworkGeneralCapabilit
 }
 
 func (tg *TelegramConnector) GetBridgeInfoVersion() (info, capabilities int) {
-	return 1, 2
+	return 1, 3
 }
 
 // TODO get these from getConfig instead of hardcoding?
@@ -156,8 +158,35 @@ func hashEmojiList(emojis []string) string {
 	return hex.EncodeToString(hasher.Sum(nil))[:8]
 }
 
+func makeTimerList() []jsontime.Milliseconds {
+	const day = 24 * time.Hour
+	const week = 7 * day
+	const month = 30 * day
+	const year = 365 * day
+	return []jsontime.Milliseconds{
+		jsontime.MS(1 * day),
+		jsontime.MS(2 * day),
+		jsontime.MS(3 * day),
+		jsontime.MS(4 * day),
+		jsontime.MS(5 * day),
+		jsontime.MS(6 * day),
+		jsontime.MS(1 * week),
+		jsontime.MS(2 * week),
+		jsontime.MS(3 * week),
+		jsontime.MS(1 * month),
+		jsontime.MS(2 * month),
+		jsontime.MS(3 * month),
+		jsontime.MS(4 * month),
+		jsontime.MS(5 * month),
+		jsontime.MS(6 * month),
+		jsontime.MS(1 * year),
+	}
+}
+
+var telegramTimers = makeTimerList()
+
 func (t *TelegramClient) GetCapabilities(ctx context.Context, portal *bridgev2.Portal) *event.RoomFeatures {
-	baseID := "fi.mau.telegram.capabilities.2025_02_04"
+	baseID := "fi.mau.telegram.capabilities.2025_08_26"
 	feat := &event.RoomFeatures{
 		Formatting:          formattingCaps,
 		File:                fileCaps,
@@ -170,6 +199,11 @@ func (t *TelegramClient) GetCapabilities(ctx context.Context, portal *bridgev2.P
 		ReactionCount:       1,
 		ReadReceipts:        true,
 		TypingNotifications: true,
+
+		DisappearingTimer: &event.DisappearingTimerCapability{
+			Types:  []event.DisappearingType{event.DisappearingTypeAfterRead},
+			Timers: telegramTimers,
+		},
 	}
 	// TODO non-admins can only edit messages within 48 hours
 

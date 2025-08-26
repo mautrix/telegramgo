@@ -174,7 +174,7 @@ func (t *TelegramClient) getGroupChatInfo(fullChat *tg.MessagesChatFull, chatID 
 
 	if ttl, ok := fullChat.FullChat.GetTTLPeriod(); ok {
 		chatInfo.Disappear = &database.DisappearingSetting{
-			Type:  database.DisappearingTypeAfterSend,
+			Type:  event.DisappearingTypeAfterSend,
 			Timer: time.Duration(ttl) * time.Second,
 		}
 	}

@@ -275,12 +275,12 @@ func (c *TelegramClient) convertToMatrix(ctx context.Context, portal *bridgev2.P
 		// metadata.
 		if ttl, ok := msg.GetTTLPeriod(); ok {
 			cm.Disappear = database.DisappearingSetting{
-				Type:  database.DisappearingTypeAfterSend,
+				Type:  event.DisappearingTypeAfterSend,
 				Timer: time.Duration(ttl) * time.Second,
 			}
 		} else if portal.Metadata.(*PortalMetadata).MessagesTTL > 0 {
 			cm.Disappear = database.DisappearingSetting{
-				Type:  database.DisappearingTypeAfterSend,
+				Type:  event.DisappearingTypeAfterSend,
 				Timer: time.Duration(ttl) * time.Second,
 			}
 		}
@@ -390,7 +390,7 @@ func (c *TelegramClient) convertMediaRequiringUpload(ctx context.Context, portal
 			}
 
 			disappearingSetting = &database.DisappearingSetting{
-				Type:  database.DisappearingTypeAfterRead,
+				Type:  event.DisappearingTypeAfterRead,
 				Timer: time.Duration(ttl) * time.Second,
 			}
 		}

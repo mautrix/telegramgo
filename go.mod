@@ -2,7 +2,7 @@ module go.mau.fi/mautrix-telegram
 
 go 1.24.0
 
-toolchain go1.24.5
+toolchain go1.25.0
 
 require (
 	github.com/cenkalti/backoff/v4 v4.3.0

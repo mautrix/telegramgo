@@ -32,6 +32,27 @@ import (
 func (tg *TelegramConnector) GetCapabilities() *bridgev2.NetworkGeneralCapabilities {
 	return &bridgev2.NetworkGeneralCapabilities{
 		DisappearingMessages: true,
+		Provisioning: bridgev2.ProvisioningCapabilities{
+			ResolveIdentifier: bridgev2.ResolveIdentifierCapabilities{
+				CreateDM:       true,
+				LookupPhone:    true,
+				LookupUsername: true,
+				ContactList:    true,
+				Search:         true,
+			},
+			GroupCreation: map[string]bridgev2.GroupTypeCapabilities{
+				"minigroup": {
+					TypeDescription: "a normal group",
+					Name:            bridgev2.GroupFieldCapability{Allowed: true, Required: true, MaxLength: 255},
+					Participants:    bridgev2.GroupFieldCapability{Allowed: true, Required: true, MinLength: 1, MaxLength: 200},
+					// TODO implement
+					//Disappear:       bridgev2.GroupFieldCapability{Allowed: true},
+				},
+				// TODO
+				//"channel": {},
+				//"supergroup": {},
+			},
+		},
 	}
 }
 

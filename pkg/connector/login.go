@@ -126,7 +126,7 @@ func finalizeLogin(ctx context.Context, user *bridgev2.User, authorization *tg.A
 			return
 		}
 
-		defer func() {
+		func() {
 			if client.stopTakeoutTimer == nil {
 				client.stopTakeoutTimer = time.AfterFunc(max(time.Hour, time.Duration(client.main.Bridge.Config.Backfill.Queue.BatchDelay*2)), sync.OnceFunc(func() { client.stopTakeout(ctx) }))
 			} else {

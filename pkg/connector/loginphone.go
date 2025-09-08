@@ -111,7 +111,7 @@ func (p *PhoneLogin) SubmitUserInput(ctx context.Context, input map[string]strin
 			return &bridgev2.LoginStep{
 				Type:         bridgev2.LoginStepTypeUserInput,
 				StepID:       LoginStepIDCode,
-				Instructions: "Please enter the code sent to your phone",
+				Instructions: "Please enter the code sent to the Telegram app on your phone",
 				UserInputParams: &bridgev2.LoginUserInputParams{
 					Fields: []bridgev2.LoginInputDataField{
 						{

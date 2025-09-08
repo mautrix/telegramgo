@@ -41,7 +41,7 @@ func (tg *TelegramConnector) GetCapabilities() *bridgev2.NetworkGeneralCapabilit
 				Search:         true,
 			},
 			GroupCreation: map[string]bridgev2.GroupTypeCapabilities{
-				"minigroup": {
+				"group": {
 					TypeDescription: "a normal group",
 					Name:            bridgev2.GroupFieldCapability{Allowed: true, Required: true, MaxLength: 255},
 					Participants:    bridgev2.GroupFieldCapability{Allowed: true, Required: true, MinLength: 1, MaxLength: 200},

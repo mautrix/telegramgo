@@ -278,11 +278,8 @@ func (c *TelegramClient) convertToMatrix(ctx context.Context, portal *bridgev2.P
 				Type:  event.DisappearingTypeAfterSend,
 				Timer: time.Duration(ttl) * time.Second,
 			}
-		} else if portal.Metadata.(*PortalMetadata).MessagesTTL > 0 {
-			cm.Disappear = database.DisappearingSetting{
-				Type:  event.DisappearingTypeAfterSend,
-				Timer: time.Duration(ttl) * time.Second,
-			}
+		} else {
+			cm.Disappear = portal.Disappear
 		}
 	}
 

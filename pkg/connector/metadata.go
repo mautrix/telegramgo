@@ -49,7 +49,6 @@ type GhostMetadata struct {
 type PortalMetadata struct {
 	IsSuperGroup     bool     `json:"is_supergroup,omitempty"`
 	ReadUpTo         int      `json:"read_up_to,omitempty"`
-	MessagesTTL      int      `json:"messages_ttl,omitempty"`
 	AllowedReactions []string `json:"allowed_reactions"`
 }
 

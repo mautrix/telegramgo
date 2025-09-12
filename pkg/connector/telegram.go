@@ -361,7 +361,7 @@ func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, entities tg.Ent
 				Timer: time.Duration(action.Period) * time.Second,
 			}
 			res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatInfoChange{
-				EventMeta: eventMeta.WithType(bridgev2.RemoteEventChatResync),
+				EventMeta: eventMeta.WithType(bridgev2.RemoteEventChatInfoChange),
 				ChatInfoChange: &bridgev2.ChatInfoChange{
 					ChatInfo: &bridgev2.ChatInfo{
 						Disappear: &setting,

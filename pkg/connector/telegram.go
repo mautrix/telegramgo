@@ -359,7 +359,7 @@ func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, entities tg.Ent
 			setting := database.DisappearingSetting{
 				Type:  event.DisappearingTypeAfterSend,
 				Timer: time.Duration(action.Period) * time.Second,
-			}
+			}.Normalize()
 			res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatInfoChange{
 				EventMeta: eventMeta.WithType(bridgev2.RemoteEventChatInfoChange),
 				ChatInfoChange: &bridgev2.ChatInfoChange{

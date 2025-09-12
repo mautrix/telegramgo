@@ -105,7 +105,7 @@ func (c *TelegramClient) mediaToMatrix(ctx context.Context, portal *bridgev2.Por
 		return convertDice(media), nil, nil, nil
 	case tg.MessageMediaGameTypeID:
 		return convertGame(media), nil, nil, nil
-	case tg.MessageMediaStoryTypeID, tg.MessageMediaInvoiceTypeID, tg.MessageMediaGiveawayTypeID, tg.MessageMediaGiveawayResultsTypeID, tg.MessageMediaPaidMediaTypeID:
+	default:
 		// TODO: support these properly
 		return &bridgev2.ConvertedMessagePart{
 			Type: event.EventMessage,
@@ -118,8 +118,6 @@ func (c *TelegramClient) mediaToMatrix(ctx context.Context, portal *bridgev2.Por
 				"fi.mau.telegram.type_id":     media.TypeID(),
 			},
 		}, nil, nil, nil
-	default:
-		return nil, nil, nil, fmt.Errorf("unsupported media type %T", media)
 	}
 }
 

@@ -33,6 +33,13 @@ import (
 	"go.mau.fi/mautrix-telegram/pkg/connector/ids"
 )
 
+var (
+	_ bridgev2.IdentifierResolvingNetworkAPI = (*TelegramClient)(nil)
+	_ bridgev2.ContactListingNetworkAPI      = (*TelegramClient)(nil)
+	_ bridgev2.UserSearchingNetworkAPI       = (*TelegramClient)(nil)
+	_ bridgev2.GroupCreatingNetworkAPI       = (*TelegramClient)(nil)
+)
+
 func (t *TelegramClient) getResolveIdentifierResponseForUser(ctx context.Context, user tg.UserClass) (*bridgev2.ResolveIdentifierResponse, error) {
 	networkUserID := ids.MakeUserID(user.GetID())
 	if userInfo, err := t.getUserInfoFromTelegramUser(ctx, user); err != nil {

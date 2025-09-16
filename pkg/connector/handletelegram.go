@@ -21,7 +21,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"slices"
 	"strings"
 	"time"
@@ -1172,24 +1171,6 @@ func (t *TelegramClient) onNotifySettings(ctx context.Context, e tg.Entities, up
 	return resultToError(res)
 }
 
-func (t *TelegramClient) HandleMute(ctx context.Context, msg *bridgev2.MatrixMute) error {
-	inputPeer, err := t.inputPeerForPortalID(ctx, msg.Portal.ID)
-	if err != nil {
-		return err
-	}
-
-	settings := tg.InputPeerNotifySettings{
-		Silent:    msg.Content.IsMuted(),
-		MuteUntil: int(max(0, min(msg.Content.GetMutedUntilTime().Unix(), math.MaxInt32))),
-	}
-
-	_, err = t.client.API().AccountUpdateNotifySettings(ctx, &tg.AccountUpdateNotifySettingsRequest{
-		Peer:     &tg.InputNotifyPeer{Peer: inputPeer},
-		Settings: settings,
-	})
-	return err
-}
-
 func (t *TelegramClient) onPinnedDialogs(ctx context.Context, e tg.Entities, msg *tg.UpdatePinnedDialogs) error {
 	needsUnpinning := map[networkid.PortalKey]struct{}{}
 	for _, portalID := range t.userLogin.Metadata.(*UserLoginMetadata).PinnedDialogs {
@@ -1247,19 +1228,6 @@ func (t *TelegramClient) onPinnedDialogs(ctx context.Context, e tg.Entities, msg
 	}
 
 	return t.userLogin.Save(ctx)
-}
-
-func (t *TelegramClient) HandleRoomTag(ctx context.Context, msg *bridgev2.MatrixRoomTag) error {
-	inputPeer, err := t.inputPeerForPortalID(ctx, msg.Portal.ID)
-	if err != nil {
-		return err
-	}
-
-	_, err = t.client.API().MessagesToggleDialogPin(ctx, &tg.MessagesToggleDialogPinRequest{
-		Pinned: slices.Contains(maps.Keys(msg.Content.Tags), event.RoomTagFavourite),
-		Peer:   &tg.InputDialogPeer{Peer: inputPeer},
-	})
-	return err
 }
 
 func (t *TelegramClient) onChatDefaultBannedRights(ctx context.Context, entities tg.Entities, update *tg.UpdateChatDefaultBannedRights) error {

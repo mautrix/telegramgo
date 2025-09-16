@@ -34,6 +34,11 @@ import (
 	"go.mau.fi/mautrix-telegram/pkg/connector/ids"
 )
 
+var (
+	_ bridgev2.BackfillingNetworkAPI           = (*TelegramClient)(nil)
+	_ bridgev2.BackfillingNetworkAPIWithLimits = (*TelegramClient)(nil)
+)
+
 // getTakeoutID blocks until the takeout ID is available.
 func (t *TelegramClient) getTakeoutID(ctx context.Context) (takeoutID int64, err error) {
 	// Always stop the takeout timeout timer

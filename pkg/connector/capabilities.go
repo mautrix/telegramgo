@@ -182,7 +182,7 @@ func hashEmojiList(emojis []string) string {
 func makeTimerList() []jsontime.Milliseconds {
 	const day = 24 * time.Hour
 	const week = 7 * day
-	const month = 30 * day
+	const month = 31 * day
 	const year = 365 * day
 	return []jsontime.Milliseconds{
 		jsontime.MS(1 * day),

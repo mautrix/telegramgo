@@ -742,7 +742,7 @@ func (t *TelegramClient) HandleMatrixDisappearingTimer(ctx context.Context, msg 
 	})
 	if err == nil {
 		msg.Portal.Disappear = database.DisappearingSetting{
-			Type:  event.DisappearingTypeAfterRead,
+			Type:  event.DisappearingTypeAfterSend,
 			Timer: msg.Content.Timer.Duration,
 		}.Normalize()
 	}

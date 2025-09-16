@@ -385,6 +385,7 @@ func (c *TelegramClient) convertMediaRequiringUpload(ctx context.Context, portal
 			}
 
 			disappearingSetting = &database.DisappearingSetting{
+				// Even though normal message TTLs are after send, media is after read
 				Type:  event.DisappearingTypeAfterRead,
 				Timer: time.Duration(ttl) * time.Second,
 			}

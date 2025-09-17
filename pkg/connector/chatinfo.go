@@ -430,6 +430,12 @@ func (t *TelegramClient) getDMPowerLevels(ghost *bridgev2.Ghost) *bridgev2.Power
 	} else {
 		plo.EventsDefault = anyonePowerLevel
 	}
+	plo.Events = map[event.Type]int{
+		event.StateRoomName:                0,
+		event.StateRoomAvatar:              0,
+		event.StateTopic:                   0,
+		event.StateBeeperDisappearingTimer: 0,
+	}
 	return &plo
 }
 
@@ -480,16 +486,19 @@ func (t *TelegramClient) getPowerLevelOverridesFromBannedRights(entity tg.ChatCl
 	}
 
 	plo.Events = map[event.Type]int{
-		event.StateEncryption:        99,
-		event.StateTombstone:         99,
-		event.StatePowerLevels:       85,
-		event.StateHistoryVisibility: 85,
+		event.StateEncryption:              99,
+		event.StateTombstone:               99,
+		event.StatePowerLevels:             85,
+		event.StateHistoryVisibility:       85,
+		event.StateBeeperDisappearingTimer: 85,
 	}
 
 	if dbr.ChangeInfo {
 		plo.Events[event.StateRoomName] = *changeInfoPowerLevel
 		plo.Events[event.StateRoomAvatar] = *changeInfoPowerLevel
 		plo.Events[event.StateTopic] = *changeInfoPowerLevel
+		// TODO is this the correct level?
+		plo.Events[event.StateBeeperDisappearingTimer] = *changeInfoPowerLevel
 	}
 
 	if dbr.PinMessages {

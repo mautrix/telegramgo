@@ -24,6 +24,7 @@ import (
 	"go.mau.fi/util/ptr"
 	"go.mau.fi/util/variationselector"
 	"maunium.net/go/mautrix/bridgev2"
+	"maunium.net/go/mautrix/bridgev2/database"
 	"maunium.net/go/mautrix/event"
 )
 
@@ -34,7 +35,7 @@ func (tg *TelegramConnector) GetCapabilities() *bridgev2.NetworkGeneralCapabilit
 }
 
 func (tg *TelegramConnector) GetBridgeInfoVersion() (info, capabilities int) {
-	return 1, 2
+	return 1, 3
 }
 
 // TODO get these from getConfig instead of hardcoding?
@@ -157,7 +158,7 @@ func hashEmojiList(emojis []string) string {
 }
 
 func (t *TelegramClient) GetCapabilities(ctx context.Context, portal *bridgev2.Portal) *event.RoomFeatures {
-	baseID := "fi.mau.telegram.capabilities.2025_02_04"
+	baseID := "fi.mau.telegram.capabilities.2025_09_23"
 	feat := &event.RoomFeatures{
 		Formatting:          formattingCaps,
 		File:                fileCaps,
@@ -170,6 +171,7 @@ func (t *TelegramClient) GetCapabilities(ctx context.Context, portal *bridgev2.P
 		ReactionCount:       1,
 		ReadReceipts:        true,
 		TypingNotifications: true,
+		DeleteChat:          true,
 	}
 	// TODO non-admins can only edit messages within 48 hours
 
@@ -194,6 +196,10 @@ func (t *TelegramClient) GetCapabilities(ctx context.Context, portal *bridgev2.P
 		baseID += "+premium"
 		feat.File = premiumFileCaps
 		feat.ReactionCount = 3
+	}
+	if portal.RoomType == database.RoomTypeDM {
+		baseID += "+dm"
+		feat.DeleteChatForEveryone = true
 	}
 	feat.ID = baseID
 	return feat

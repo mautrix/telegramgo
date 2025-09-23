@@ -121,9 +121,10 @@ var (
 	_ bridgev2.IdentifierResolvingNetworkAPI   = (*TelegramClient)(nil)
 	_ bridgev2.ContactListingNetworkAPI        = (*TelegramClient)(nil)
 	_ bridgev2.UserSearchingNetworkAPI         = (*TelegramClient)(nil)
-	_ bridgev2.GroupCreatingNetworkAPI         = (*TelegramClient)(nil)
-	_ bridgev2.MuteHandlingNetworkAPI          = (*TelegramClient)(nil)
-	_ bridgev2.TagHandlingNetworkAPI           = (*TelegramClient)(nil)
+	// _ bridgev2.GroupCreatingNetworkAPI         = (*TelegramClient)(nil)
+	_ bridgev2.MuteHandlingNetworkAPI       = (*TelegramClient)(nil)
+	_ bridgev2.TagHandlingNetworkAPI        = (*TelegramClient)(nil)
+	_ bridgev2.DeleteChatHandlingNetworkAPI = (*TelegramClient)(nil)
 )
 
 type UpdateDispatcher struct {
@@ -755,4 +756,46 @@ func (t *TelegramClient) senderForUserID(userID int64) bridgev2.EventSender {
 		SenderLogin: ids.MakeUserLoginID(userID),
 		Sender:      ids.MakeUserID(userID),
 	}
+}
+
+func (t *TelegramClient) HandleMatrixDeleteChat(ctx context.Context, chat *bridgev2.MatrixDeleteChat) error {
+	peerType, id, err := ids.ParsePortalID(chat.Portal.ID)
+	if err != nil {
+		return err
+	}
+	switch peerType {
+	case ids.PeerTypeUser:
+		if chat.Content.DeleteForEveryone {
+			_, err := t.client.API().MessagesDeleteHistory(ctx, &tg.MessagesDeleteHistoryRequest{
+				Peer:   &tg.InputPeerUser{UserID: id},
+				Revoke: true,
+				MaxID:  0,
+			})
+			if err != nil {
+				return err
+			}
+		}
+		_, err = t.client.API().MessagesDeleteChat(ctx, id)
+		if err != nil {
+			return err
+		}
+	case ids.PeerTypeChat:
+		_, err := t.client.API().MessagesDeleteChat(ctx, id)
+		if err != nil {
+			return err
+		}
+	case ids.PeerTypeChannel:
+		if accessHash, err := t.ScopedStore.GetAccessHash(ctx, ids.PeerTypeChannel, id); err != nil {
+			return err
+		} else {
+			_, err := t.client.API().ChannelsLeaveChannel(ctx, &tg.InputChannel{
+				ChannelID:  id,
+				AccessHash: accessHash,
+			})
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

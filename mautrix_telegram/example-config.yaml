@@ -280,6 +280,10 @@ bridge:
         # Only relevant when using end-to-bridge encryption, required when using encryption with next-gen auth (MSC3861).
         # Changing this option requires updating the appservice registration file.
         msc4190: false
+        # Should the bridge bot generate a recovery key and cross-signing keys and verify itself?
+        # Note that without the latest version of MSC4190, this will fail if you reset the bridge database.
+        # The generated recovery key will be printed in logs.
+        self_sign: false
         # Require encryption, drop any unencrypted messages.
         require: false
         # Enable key sharing? If enabled, key requests for rooms where users are in will be fulfilled.

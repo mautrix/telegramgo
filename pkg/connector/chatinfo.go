@@ -91,12 +91,18 @@ func adminRightsToPowerLevel(rights tg.ChatAdminRights) *int {
 	return otherPowerLevel
 }
 
-func (t *TelegramClient) getDMChatInfo(userID int64) *bridgev2.ChatInfo {
+func (t *TelegramClient) getDMChatInfo(ctx context.Context, userID int64) (*bridgev2.ChatInfo, error) {
+	ghost, err := t.main.Bridge.GetGhostByID(ctx, ids.MakeUserID(userID))
+	if err != nil {
+		return nil, err
+	}
+
 	chatInfo := bridgev2.ChatInfo{
 		Type: ptr.Ptr(database.RoomTypeDM),
 		Members: &bridgev2.ChatMemberList{
-			IsFull:    true,
-			MemberMap: map[networkid.UserID]bridgev2.ChatMember{},
+			IsFull:      true,
+			MemberMap:   map[networkid.UserID]bridgev2.ChatMember{},
+			PowerLevels: t.getDMPowerLevels(ghost),
 		},
 		CanBackfill: true,
 	}
@@ -112,7 +118,7 @@ func (t *TelegramClient) getDMChatInfo(userID int64) *bridgev2.ChatInfo {
 		chatInfo.Name = ptr.Ptr("Telegram Saved Messages")
 		chatInfo.Topic = ptr.Ptr("Your Telegram cloud storage chat")
 	}
-	return &chatInfo
+	return &chatInfo, nil
 }
 
 func (t *TelegramClient) getGroupChatInfo(fullChat *tg.MessagesChatFull, chatID int64) (*bridgev2.ChatInfo, bool, error) {
@@ -243,7 +249,7 @@ func (t *TelegramClient) GetChatInfo(ctx context.Context, portal *bridgev2.Porta
 
 	switch peerType {
 	case ids.PeerTypeUser:
-		return t.getDMChatInfo(id), nil
+		return t.getDMChatInfo(ctx, id)
 	case ids.PeerTypeChat:
 		fullChat, err := APICallWithUpdates(ctx, t, func() (*tg.MessagesChatFull, error) {
 			return t.client.API().MessagesGetFullChat(ctx, id)
@@ -261,6 +267,7 @@ func (t *TelegramClient) GetChatInfo(ctx context.Context, portal *bridgev2.Porta
 			return nil, fmt.Errorf("full chat is %T not *tg.ChatFull", fullChat.FullChat)
 		}
 		chatInfo.Avatar = t.avatarFromPhoto(ctx, peerType, id, chatFull.ChatPhoto)
+		chatInfo.Members.PowerLevels = t.getGroupChatPowerLevels(ctx, fullChat.GetChats()[0])
 
 		if chatFull.Participants.TypeID() == tg.ChatParticipantsForbiddenTypeID {
 			chatInfo.Members.IsFull = false
@@ -444,6 +451,8 @@ func (t *TelegramClient) getGroupChatPowerLevels(ctx context.Context, entity tg.
 		Str("action", "get_group_chat_power_levels").
 		Logger()
 
+	ctx = log.WithContext(ctx)
+
 	dbrAble, ok := entity.(interface {
 		GetDefaultBannedRights() (tg.ChatBannedRights, bool)
 	})
@@ -493,12 +502,16 @@ func (t *TelegramClient) getPowerLevelOverridesFromBannedRights(entity tg.ChatCl
 		event.StateBeeperDisappearingTimer: 85,
 	}
 
-	if dbr.ChangeInfo {
+	// If a flag such as ChangeInfo is _true_, then that means the user is banned from changing that set of fields
+	if !dbr.ChangeInfo {
+		// Otherwise, set the more permissive power levels
 		plo.Events[event.StateRoomName] = *changeInfoPowerLevel
 		plo.Events[event.StateRoomAvatar] = *changeInfoPowerLevel
 		plo.Events[event.StateTopic] = *changeInfoPowerLevel
+
 		// TODO is this the correct level?
-		plo.Events[event.StateBeeperDisappearingTimer] = *changeInfoPowerLevel
+		// any user in a group chat / supergroup appears to be able to change the disappearing timer, not just admins
+		plo.Events[event.StateBeeperDisappearingTimer] = *anyonePowerLevel
 	}
 
 	if dbr.PinMessages {

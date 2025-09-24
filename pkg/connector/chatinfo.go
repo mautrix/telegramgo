@@ -500,16 +500,16 @@ func (t *TelegramClient) getPowerLevelOverridesFromBannedRights(entity tg.ChatCl
 		event.StateBeeperDisappearingTimer: 85,
 	}
 
-	// If a flag such as ChangeInfo is _true_, then that means the user is banned from changing that set of fields
-	if !dbr.ChangeInfo {
-		// Otherwise, set the more permissive power levels
+	if dbr.ChangeInfo {
 		plo.Events[event.StateRoomName] = *changeInfoPowerLevel
 		plo.Events[event.StateRoomAvatar] = *changeInfoPowerLevel
 		plo.Events[event.StateTopic] = *changeInfoPowerLevel
-
-		// TODO is this the correct level?
-		// any user in a group chat / supergroup appears to be able to change the disappearing timer, not just admins
-		plo.Events[event.StateBeeperDisappearingTimer] = *anyonePowerLevel
+		plo.Events[event.StateBeeperDisappearingTimer] = *changeInfoPowerLevel
+	} else {
+		plo.Events[event.StateRoomName] = 0
+		plo.Events[event.StateRoomAvatar] = 0
+		plo.Events[event.StateTopic] = 0
+		plo.Events[event.StateBeeperDisappearingTimer] = 0
 	}
 
 	if dbr.PinMessages {
@@ -520,6 +520,9 @@ func (t *TelegramClient) getPowerLevelOverridesFromBannedRights(entity tg.ChatCl
 
 	if dbr.SendStickers {
 		plo.Events[event.EventSticker] = *postMessagesPowerLevel
+	} else {
+		plo.Events[event.EventSticker] = 0
 	}
+
 	return &plo
 }

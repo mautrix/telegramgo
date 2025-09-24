@@ -451,8 +451,6 @@ func (t *TelegramClient) getGroupChatPowerLevels(ctx context.Context, entity tg.
 		Str("action", "get_group_chat_power_levels").
 		Logger()
 
-	ctx = log.WithContext(ctx)
-
 	dbrAble, ok := entity.(interface {
 		GetDefaultBannedRights() (tg.ChatBannedRights, bool)
 	})

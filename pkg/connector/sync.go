@@ -136,7 +136,7 @@ func (t *TelegramClient) handleDialogs(ctx context.Context, dialogs tg.ModifiedM
 			}
 			chatInfo, err = t.getDMChatInfo(ctx, peer.UserID)
 			if err != nil {
-				return fmt.Errorf("failed to get dm info for %s: %w", peer.UserID, err)
+				return fmt.Errorf("failed to get dm info for %d: %w", peer.UserID, err)
 			}
 		case *tg.PeerChat:
 			chat := chats[peer.ChatID]

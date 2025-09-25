@@ -104,7 +104,7 @@ func (t *TelegramClient) getDMChatInfo(ctx context.Context, userID int64) (*brid
 			MemberMap:   map[networkid.UserID]bridgev2.ChatMember{},
 			PowerLevels: t.getDMPowerLevels(ghost),
 		},
-		CanBackfill: true,
+		CanBackfill:  true,
 		ExtraUpdates: updatePortalLastSyncAt,
 	}
 	chatInfo.Members.MemberMap[ids.MakeUserID(userID)] = bridgev2.ChatMember{EventSender: t.senderForUserID(userID)}

@@ -42,6 +42,7 @@ import (
 	"maunium.net/go/mautrix/bridgev2"
 	"maunium.net/go/mautrix/bridgev2/database"
 	"maunium.net/go/mautrix/bridgev2/networkid"
+	"maunium.net/go/mautrix/bridgev2/simplevent"
 	"maunium.net/go/mautrix/event"
 	"maunium.net/go/mautrix/id"
 
@@ -65,6 +66,7 @@ var (
 	_ bridgev2.DisappearTimerChangingNetworkAPI = (*TelegramClient)(nil)
 	_ bridgev2.MuteHandlingNetworkAPI           = (*TelegramClient)(nil)
 	_ bridgev2.TagHandlingNetworkAPI            = (*TelegramClient)(nil)
+	_ bridgev2.ChatViewingNetworkAPI            = (*TelegramClient)(nil)
 )
 
 func getMediaFilename(content *event.MessageEventContent) (filename string) {
@@ -83,6 +85,23 @@ func getMediaFilename(content *event.MessageEventContent) (filename string) {
 		return filename + ".jpg" // Assume it's a JPEG
 	}
 	return filename
+}
+
+func (t *TelegramClient) HandleMatrixViewingChat(ctx context.Context, msg *bridgev2.MatrixViewingChat) error {
+	if msg.Portal == nil {
+		return nil
+	}
+	meta := msg.Portal.Metadata.(*PortalMetadata)
+	if meta.LastSync.Add(24 * time.Hour).Before(time.Now()) {
+		t.userLogin.QueueRemoteEvent(&simplevent.ChatResync{
+			EventMeta: simplevent.EventMeta{
+				Type:      bridgev2.RemoteEventChatResync,
+				PortalKey: msg.Portal.PortalKey,
+			},
+			GetChatInfoFunc: t.GetChatInfo,
+		})
+	}
+	return nil
 }
 
 func (t *TelegramClient) transferMediaToTelegram(ctx context.Context, content *event.MessageEventContent, sticker bool) (tg.InputMediaClass, error) {

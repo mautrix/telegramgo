@@ -19,9 +19,12 @@ package connector
 import (
 	"context"
 
+	"maunium.net/go/mautrix/bridgev2"
 	"maunium.net/go/mautrix/bridgev2/database"
 	"maunium.net/go/mautrix/bridgev2/networkid"
 	"maunium.net/go/mautrix/id"
+
+	"go.mau.fi/util/jsontime"
 
 	"go.mau.fi/mautrix-telegram/pkg/gotd/crypto"
 	"go.mau.fi/mautrix-telegram/pkg/gotd/session"
@@ -47,9 +50,10 @@ type GhostMetadata struct {
 }
 
 type PortalMetadata struct {
-	IsSuperGroup     bool     `json:"is_supergroup,omitempty"`
-	ReadUpTo         int      `json:"read_up_to,omitempty"`
-	AllowedReactions []string `json:"allowed_reactions"`
+	IsSuperGroup     bool          `json:"is_supergroup,omitempty"`
+	ReadUpTo         int           `json:"read_up_to,omitempty"`
+	AllowedReactions []string      `json:"allowed_reactions"`
+	LastSync         jsontime.Unix `json:"last_sync,omitempty"`
 }
 
 func (pm *PortalMetadata) SetIsSuperGroup(isSupergroup bool) (changed bool) {
@@ -117,4 +121,10 @@ func (s *UserLoginSession) Save(ctx context.Context, data *session.Data) error {
 	s.Salt = data.Salt
 	// TODO save UserLogin to database?
 	return nil
+}
+
+func updatePortalLastSyncAt(_ context.Context, portal *bridgev2.Portal) bool {
+	meta := portal.Metadata.(*PortalMetadata)
+	meta.LastSync = jsontime.UnixNow()
+	return true
 }

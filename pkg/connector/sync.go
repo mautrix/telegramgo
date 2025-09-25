@@ -134,7 +134,10 @@ func (t *TelegramClient) handleDialogs(ctx context.Context, dialogs tg.ModifiedM
 				log.Debug().Int64("user_id", peer.UserID).Msg("Not syncing portal because user is deleted")
 				continue
 			}
-			chatInfo = t.getDMChatInfo(peer.UserID)
+			chatInfo, err = t.getDMChatInfo(ctx, peer.UserID)
+			if err != nil {
+				return fmt.Errorf("failed to get dm info for %d: %w", peer.UserID, err)
+			}
 		case *tg.PeerChat:
 			chat := chats[peer.ChatID]
 			if chat.TypeID() == tg.ChatForbiddenTypeID {

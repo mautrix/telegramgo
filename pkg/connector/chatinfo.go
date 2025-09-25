@@ -91,14 +91,21 @@ func adminRightsToPowerLevel(rights tg.ChatAdminRights) *int {
 	return otherPowerLevel
 }
 
-func (t *TelegramClient) getDMChatInfo(userID int64) *bridgev2.ChatInfo {
+func (t *TelegramClient) getDMChatInfo(ctx context.Context, userID int64) (*bridgev2.ChatInfo, error) {
+	ghost, err := t.main.Bridge.GetGhostByID(ctx, ids.MakeUserID(userID))
+	if err != nil {
+		return nil, err
+	}
+
 	chatInfo := bridgev2.ChatInfo{
 		Type: ptr.Ptr(database.RoomTypeDM),
 		Members: &bridgev2.ChatMemberList{
-			IsFull:    true,
-			MemberMap: map[networkid.UserID]bridgev2.ChatMember{},
+			IsFull:      true,
+			MemberMap:   map[networkid.UserID]bridgev2.ChatMember{},
+			PowerLevels: t.getDMPowerLevels(ghost),
 		},
-		CanBackfill: true,
+		CanBackfill:  true,
+		ExtraUpdates: updatePortalLastSyncAt,
 	}
 	chatInfo.Members.MemberMap[ids.MakeUserID(userID)] = bridgev2.ChatMember{EventSender: t.senderForUserID(userID)}
 	chatInfo.Members.MemberMap[t.userID] = bridgev2.ChatMember{EventSender: t.mySender()}
@@ -112,7 +119,7 @@ func (t *TelegramClient) getDMChatInfo(userID int64) *bridgev2.ChatInfo {
 		chatInfo.Name = ptr.Ptr("Telegram Saved Messages")
 		chatInfo.Topic = ptr.Ptr("Your Telegram cloud storage chat")
 	}
-	return &chatInfo
+	return &chatInfo, nil
 }
 
 func (t *TelegramClient) getGroupChatInfo(fullChat *tg.MessagesChatFull, chatID int64) (*bridgev2.ChatInfo, bool, error) {
@@ -142,15 +149,14 @@ func (t *TelegramClient) getGroupChatInfo(fullChat *tg.MessagesChatFull, chatID 
 		CanBackfill: true,
 		ExtraUpdates: func(ctx context.Context, p *bridgev2.Portal) bool {
 			meta := p.Metadata.(*PortalMetadata)
-			changed := meta.SetIsSuperGroup(isMegagroup)
+			_ = updatePortalLastSyncAt(ctx, p)
+			_ = meta.SetIsSuperGroup(isMegagroup)
 
 			if reactions, ok := fullChat.FullChat.GetAvailableReactions(); ok {
 				switch typedReactions := reactions.(type) {
 				case *tg.ChatReactionsAll:
-					changed = meta.AllowedReactions != nil
 					meta.AllowedReactions = nil
 				case *tg.ChatReactionsNone:
-					changed = meta.AllowedReactions == nil || len(meta.AllowedReactions) > 0
 					meta.AllowedReactions = []string{}
 				case *tg.ChatReactionsSome:
 					allowedReactions := make([]string, 0, len(typedReactions.Reactions))
@@ -162,13 +168,12 @@ func (t *TelegramClient) getGroupChatInfo(fullChat *tg.MessagesChatFull, chatID 
 					}
 					slices.Sort(allowedReactions)
 					if !slices.Equal(meta.AllowedReactions, allowedReactions) {
-						changed = true
 						meta.AllowedReactions = allowedReactions
 					}
 				}
 			}
 
-			return changed
+			return true
 		},
 	}
 
@@ -243,7 +248,7 @@ func (t *TelegramClient) GetChatInfo(ctx context.Context, portal *bridgev2.Porta
 
 	switch peerType {
 	case ids.PeerTypeUser:
-		return t.getDMChatInfo(id), nil
+		return t.getDMChatInfo(ctx, id)
 	case ids.PeerTypeChat:
 		fullChat, err := APICallWithUpdates(ctx, t, func() (*tg.MessagesChatFull, error) {
 			return t.client.API().MessagesGetFullChat(ctx, id)
@@ -261,6 +266,7 @@ func (t *TelegramClient) GetChatInfo(ctx context.Context, portal *bridgev2.Porta
 			return nil, fmt.Errorf("full chat is %T not *tg.ChatFull", fullChat.FullChat)
 		}
 		chatInfo.Avatar = t.avatarFromPhoto(ctx, peerType, id, chatFull.ChatPhoto)
+		chatInfo.Members.PowerLevels = t.getGroupChatPowerLevels(ctx, fullChat.GetChats()[0])
 
 		if chatFull.Participants.TypeID() == tg.ChatParticipantsForbiddenTypeID {
 			chatInfo.Members.IsFull = false
@@ -497,8 +503,12 @@ func (t *TelegramClient) getPowerLevelOverridesFromBannedRights(entity tg.ChatCl
 		plo.Events[event.StateRoomName] = *changeInfoPowerLevel
 		plo.Events[event.StateRoomAvatar] = *changeInfoPowerLevel
 		plo.Events[event.StateTopic] = *changeInfoPowerLevel
-		// TODO is this the correct level?
 		plo.Events[event.StateBeeperDisappearingTimer] = *changeInfoPowerLevel
+	} else {
+		plo.Events[event.StateRoomName] = 0
+		plo.Events[event.StateRoomAvatar] = 0
+		plo.Events[event.StateTopic] = 0
+		plo.Events[event.StateBeeperDisappearingTimer] = 0
 	}
 
 	if dbr.PinMessages {
@@ -509,6 +519,9 @@ func (t *TelegramClient) getPowerLevelOverridesFromBannedRights(entity tg.ChatCl
 
 	if dbr.SendStickers {
 		plo.Events[event.EventSticker] = *postMessagesPowerLevel
+	} else {
+		plo.Events[event.EventSticker] = 0
 	}
+
 	return &plo
 }

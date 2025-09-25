@@ -105,7 +105,7 @@ func (t *TelegramClient) getDMChatInfo(ctx context.Context, userID int64) (*brid
 			PowerLevels: t.getDMPowerLevels(ghost),
 		},
 		CanBackfill: true,
-		ExtraUpdates: portalUpdateLastSyncAt,
+		ExtraUpdates: updatePortalLastSyncAt,
 	}
 	chatInfo.Members.MemberMap[ids.MakeUserID(userID)] = bridgev2.ChatMember{EventSender: t.senderForUserID(userID)}
 	chatInfo.Members.MemberMap[t.userID] = bridgev2.ChatMember{EventSender: t.mySender()}
@@ -150,6 +150,7 @@ func (t *TelegramClient) getGroupChatInfo(fullChat *tg.MessagesChatFull, chatID 
 		ExtraUpdates: func(ctx context.Context, p *bridgev2.Portal) bool {
 			meta := p.Metadata.(*PortalMetadata)
 			_ = updatePortalLastSyncAt(ctx, p)
+			_ = meta.SetIsSuperGroup(isMegagroup)
 
 			if reactions, ok := fullChat.FullChat.GetAvailableReactions(); ok {
 				switch typedReactions := reactions.(type) {

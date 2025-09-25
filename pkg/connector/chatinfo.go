@@ -105,6 +105,7 @@ func (t *TelegramClient) getDMChatInfo(ctx context.Context, userID int64) (*brid
 			PowerLevels: t.getDMPowerLevels(ghost),
 		},
 		CanBackfill: true,
+		ExtraUpdates: portalUpdateLastSyncAt,
 	}
 	chatInfo.Members.MemberMap[ids.MakeUserID(userID)] = bridgev2.ChatMember{EventSender: t.senderForUserID(userID)}
 	chatInfo.Members.MemberMap[t.userID] = bridgev2.ChatMember{EventSender: t.mySender()}
@@ -148,15 +149,13 @@ func (t *TelegramClient) getGroupChatInfo(fullChat *tg.MessagesChatFull, chatID 
 		CanBackfill: true,
 		ExtraUpdates: func(ctx context.Context, p *bridgev2.Portal) bool {
 			meta := p.Metadata.(*PortalMetadata)
-			changed := meta.SetIsSuperGroup(isMegagroup)
+			_ = updatePortalLastSyncAt(ctx, p)
 
 			if reactions, ok := fullChat.FullChat.GetAvailableReactions(); ok {
 				switch typedReactions := reactions.(type) {
 				case *tg.ChatReactionsAll:
-					changed = meta.AllowedReactions != nil
 					meta.AllowedReactions = nil
 				case *tg.ChatReactionsNone:
-					changed = meta.AllowedReactions == nil || len(meta.AllowedReactions) > 0
 					meta.AllowedReactions = []string{}
 				case *tg.ChatReactionsSome:
 					allowedReactions := make([]string, 0, len(typedReactions.Reactions))
@@ -168,13 +167,12 @@ func (t *TelegramClient) getGroupChatInfo(fullChat *tg.MessagesChatFull, chatID 
 					}
 					slices.Sort(allowedReactions)
 					if !slices.Equal(meta.AllowedReactions, allowedReactions) {
-						changed = true
 						meta.AllowedReactions = allowedReactions
 					}
 				}
 			}
 
-			return changed
+			return true
 		},
 	}
 

@@ -98,7 +98,7 @@ func (t *TelegramClient) HandleMatrixViewingChat(ctx context.Context, msg *bridg
 				Type:      bridgev2.RemoteEventChatResync,
 				PortalKey: msg.Portal.PortalKey,
 			},
-			GetChatInfoFunc: t.GetChatInfo
+			GetChatInfoFunc: t.GetChatInfo,
 		})
 	}
 	return nil

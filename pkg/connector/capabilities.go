@@ -20,7 +20,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"time"
 
+	"go.mau.fi/util/jsontime"
 	"go.mau.fi/util/ptr"
 	"go.mau.fi/util/variationselector"
 	"maunium.net/go/mautrix/bridgev2"
@@ -31,11 +33,32 @@ import (
 func (tg *TelegramConnector) GetCapabilities() *bridgev2.NetworkGeneralCapabilities {
 	return &bridgev2.NetworkGeneralCapabilities{
 		DisappearingMessages: true,
+		Provisioning: bridgev2.ProvisioningCapabilities{
+			ResolveIdentifier: bridgev2.ResolveIdentifierCapabilities{
+				CreateDM:       true,
+				LookupPhone:    true,
+				LookupUsername: true,
+				ContactList:    true,
+				Search:         true,
+			},
+			GroupCreation: map[string]bridgev2.GroupTypeCapabilities{
+				"group": {
+					TypeDescription: "a normal group",
+					Name:            bridgev2.GroupFieldCapability{Allowed: true, Required: true, MaxLength: 255},
+					Participants:    bridgev2.GroupFieldCapability{Allowed: true, Required: true, MinLength: 1, MaxLength: 200},
+					// TODO implement
+					//Disappear:       bridgev2.GroupFieldCapability{Allowed: true},
+				},
+				// TODO
+				//"channel": {},
+				//"supergroup": {},
+			},
+		},
 	}
 }
 
 func (tg *TelegramConnector) GetBridgeInfoVersion() (info, capabilities int) {
-	return 1, 3
+	return 1, 6
 }
 
 // TODO get these from getConfig instead of hardcoding?
@@ -157,8 +180,35 @@ func hashEmojiList(emojis []string) string {
 	return hex.EncodeToString(hasher.Sum(nil))[:8]
 }
 
+func makeTimerList() []jsontime.Milliseconds {
+	const day = 24 * time.Hour
+	const week = 7 * day
+	const month = 31 * day
+	const year = 365 * day
+	return []jsontime.Milliseconds{
+		jsontime.MS(1 * day),
+		jsontime.MS(2 * day),
+		jsontime.MS(3 * day),
+		jsontime.MS(4 * day),
+		jsontime.MS(5 * day),
+		jsontime.MS(6 * day),
+		jsontime.MS(1 * week),
+		jsontime.MS(2 * week),
+		jsontime.MS(3 * week),
+		jsontime.MS(1 * month),
+		jsontime.MS(2 * month),
+		jsontime.MS(3 * month),
+		jsontime.MS(4 * month),
+		jsontime.MS(5 * month),
+		jsontime.MS(6 * month),
+		jsontime.MS(1 * year),
+	}
+}
+
+var telegramTimers = makeTimerList()
+
 func (t *TelegramClient) GetCapabilities(ctx context.Context, portal *bridgev2.Portal) *event.RoomFeatures {
-	baseID := "fi.mau.telegram.capabilities.2025_09_23"
+	baseID := "fi.mau.telegram.capabilities.2025_09_27"
 	feat := &event.RoomFeatures{
 		Formatting:          formattingCaps,
 		File:                fileCaps,
@@ -172,6 +222,11 @@ func (t *TelegramClient) GetCapabilities(ctx context.Context, portal *bridgev2.P
 		ReadReceipts:        true,
 		TypingNotifications: true,
 		DeleteChat:          true,
+
+		DisappearingTimer: &event.DisappearingTimerCapability{
+			Types:  []event.DisappearingType{event.DisappearingTypeAfterSend},
+			Timers: telegramTimers,
+		},
 	}
 	// TODO non-admins can only edit messages within 48 hours
 

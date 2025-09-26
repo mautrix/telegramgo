@@ -134,7 +134,10 @@ func (t *TelegramClient) handleDialogs(ctx context.Context, dialogs tg.ModifiedM
 				log.Debug().Int64("user_id", peer.UserID).Msg("Not syncing portal because user is deleted")
 				continue
 			}
-			chatInfo = t.getDMChatInfo(peer.UserID)
+			chatInfo, err = t.getDMChatInfo(ctx, peer.UserID)
+			if err != nil {
+				return fmt.Errorf("failed to get dm info for %d: %w", peer.UserID, err)
+			}
 		case *tg.PeerChat:
 			chat := chats[peer.ChatID]
 			if chat.TypeID() == tg.ChatForbiddenTypeID {
@@ -149,34 +152,9 @@ func (t *TelegramClient) handleDialogs(ctx context.Context, dialogs tg.ModifiedM
 					Msg("Not syncing portal because chat type is unsupported")
 				continue
 			}
-			fullChat, err := APICallWithUpdates(ctx, t, func() (*tg.MessagesChatFull, error) {
-				return t.client.API().MessagesGetFullChat(ctx, chat.GetID())
-			})
+			chatInfo, err = t.GetChatInfo(ctx, portal)
 			if err != nil {
-				return err
-			}
-			chatFull, ok := fullChat.FullChat.(*tg.ChatFull)
-			var avatar *bridgev2.Avatar
-			if ok && chatFull.ChatPhoto != nil {
-				avatar, err = t.convertPhoto(ctx, ids.PeerTypeChat, chatFull.ID, chatFull.ChatPhoto)
-				if err != nil {
-					return err
-				}
-			}
-
-			chatInfo = &bridgev2.ChatInfo{
-				CanBackfill: true,
-				Name:        &chat.(*tg.Chat).Title,
-				Members: &bridgev2.ChatMemberList{
-					PowerLevels: t.getGroupChatPowerLevels(ctx, chat),
-					MemberMap: map[networkid.UserID]bridgev2.ChatMember{
-						t.userID: {
-							EventSender: t.mySender(),
-							Membership:  event.MembershipJoin,
-						},
-					},
-				},
-				Avatar: avatar,
+				return fmt.Errorf("failed to get chat info for %s: %w", portalKey, err)
 			}
 		case *tg.PeerChannel:
 			channel := chats[peer.ChannelID]
@@ -192,39 +170,9 @@ func (t *TelegramClient) handleDialogs(ctx context.Context, dialogs tg.ModifiedM
 					Msg("Not syncing portal because channel type is unsupported")
 				continue
 			}
-			fullChannel := channel.(*tg.Channel)
-			var avatar *bridgev2.Avatar
-			if photo, ok := fullChannel.GetPhoto().(*tg.ChatPhoto); ok {
-				avatar, err = t.convertChatPhoto(ctx, fullChannel.ID, fullChannel.AccessHash, photo)
-				if err != nil {
-					return err
-				}
-			}
-			chatInfo = &bridgev2.ChatInfo{
-				CanBackfill: true,
-				Name:        &channel.(*tg.Channel).Title,
-				Members: &bridgev2.ChatMemberList{
-					PowerLevels: t.getGroupChatPowerLevels(ctx, channel),
-					MemberMap: map[networkid.UserID]bridgev2.ChatMember{
-						t.userID: {
-							EventSender: t.mySender(),
-							Membership:  event.MembershipJoin,
-						},
-					},
-				},
-				Avatar: avatar,
-				ExtraUpdates: func(ctx context.Context, p *bridgev2.Portal) bool {
-					return p.Metadata.(*PortalMetadata).SetIsSuperGroup(channel.(*tg.Channel).GetMegagroup())
-				},
-			}
-			if !portal.Metadata.(*PortalMetadata).IsSuperGroup {
-				// Add the channel user
-				sender := ids.MakeChannelUserID(peer.ChannelID)
-				chatInfo.Members.MemberMap[sender] = bridgev2.ChatMember{
-					EventSender: bridgev2.EventSender{Sender: sender},
-					Membership:  event.MembershipJoin,
-					PowerLevel:  superadminPowerLevel,
-				}
+			chatInfo, err = t.GetChatInfo(ctx, portal)
+			if err != nil {
+				return fmt.Errorf("failed to get chat info for %s: %w", portalKey, err)
 			}
 		}
 

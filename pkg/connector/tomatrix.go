@@ -105,7 +105,7 @@ func (c *TelegramClient) mediaToMatrix(ctx context.Context, portal *bridgev2.Por
 		return convertDice(media), nil, nil, nil
 	case tg.MessageMediaGameTypeID:
 		return convertGame(media), nil, nil, nil
-	case tg.MessageMediaStoryTypeID, tg.MessageMediaInvoiceTypeID, tg.MessageMediaGiveawayTypeID, tg.MessageMediaGiveawayResultsTypeID:
+	default:
 		// TODO: support these properly
 		return &bridgev2.ConvertedMessagePart{
 			Type: event.EventMessage,
@@ -118,8 +118,6 @@ func (c *TelegramClient) mediaToMatrix(ctx context.Context, portal *bridgev2.Por
 				"fi.mau.telegram.type_id":     media.TypeID(),
 			},
 		}, nil, nil, nil
-	default:
-		return nil, nil, nil, fmt.Errorf("unsupported media type %T", media)
 	}
 }
 
@@ -275,14 +273,11 @@ func (c *TelegramClient) convertToMatrix(ctx context.Context, portal *bridgev2.P
 		// metadata.
 		if ttl, ok := msg.GetTTLPeriod(); ok {
 			cm.Disappear = database.DisappearingSetting{
-				Type:  database.DisappearingTypeAfterSend,
+				Type:  event.DisappearingTypeAfterSend,
 				Timer: time.Duration(ttl) * time.Second,
 			}
-		} else if portal.Metadata.(*PortalMetadata).MessagesTTL > 0 {
-			cm.Disappear = database.DisappearingSetting{
-				Type:  database.DisappearingTypeAfterSend,
-				Timer: time.Duration(ttl) * time.Second,
-			}
+		} else {
+			cm.Disappear = portal.Disappear
 		}
 	}
 
@@ -390,7 +385,8 @@ func (c *TelegramClient) convertMediaRequiringUpload(ctx context.Context, portal
 			}
 
 			disappearingSetting = &database.DisappearingSetting{
-				Type:  database.DisappearingTypeAfterRead,
+				// Even though normal message TTLs are after send, media is after read
+				Type:  event.DisappearingTypeAfterRead,
 				Timer: time.Duration(ttl) * time.Second,
 			}
 		}

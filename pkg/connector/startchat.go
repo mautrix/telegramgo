@@ -24,13 +24,20 @@ import (
 	"strings"
 
 	"github.com/rs/zerolog"
+	"go.mau.fi/util/ptr"
 	"maunium.net/go/mautrix/bridgev2"
-	"maunium.net/go/mautrix/bridgev2/networkid"
 
 	"go.mau.fi/mautrix-telegram/pkg/gotd/telegram/query/hasher"
 	"go.mau.fi/mautrix-telegram/pkg/gotd/tg"
 
 	"go.mau.fi/mautrix-telegram/pkg/connector/ids"
+)
+
+var (
+	_ bridgev2.IdentifierResolvingNetworkAPI = (*TelegramClient)(nil)
+	_ bridgev2.ContactListingNetworkAPI      = (*TelegramClient)(nil)
+	_ bridgev2.UserSearchingNetworkAPI       = (*TelegramClient)(nil)
+	_ bridgev2.GroupCreatingNetworkAPI       = (*TelegramClient)(nil)
 )
 
 func (t *TelegramClient) getResolveIdentifierResponseForUser(ctx context.Context, user tg.UserClass) (*bridgev2.ResolveIdentifierResponse, error) {
@@ -224,16 +231,11 @@ func (t *TelegramClient) GetContactList(ctx context.Context) (resp []*bridgev2.R
 }
 
 // TODO support channels
-func (t *TelegramClient) CreateGroup(ctx context.Context, name string, users ...networkid.UserID) (*bridgev2.CreateChatResponse, error) {
-	if len(users) == 0 {
-		return nil, fmt.Errorf("no users provided")
-	} else if len(users) > 200 {
-		return nil, fmt.Errorf("too many users provided: %d (max 200)", len(users))
-	}
+func (t *TelegramClient) CreateGroup(ctx context.Context, params *bridgev2.GroupCreateParams) (*bridgev2.CreateChatResponse, error) {
 	req := tg.MessagesCreateChatRequest{
-		Title: name,
+		Title: ptr.Val(params.Name).Name,
 	}
-	for _, networkUserID := range users {
+	for _, networkUserID := range params.Participants {
 		if peerType, userID, err := ids.ParseUserID(networkUserID); err != nil {
 			return nil, fmt.Errorf("failed to parse user ID: %w", err)
 		} else if peerType != ids.PeerTypeUser {
@@ -262,8 +264,28 @@ func (t *TelegramClient) CreateGroup(ctx context.Context, name string, users ...
 	} else if chat, ok := chats[0].(*tg.Chat); !ok {
 		return nil, fmt.Errorf("unexpected chat type: %T", chats[0])
 	} else {
+		portalKey := t.makePortalKeyFromID(ids.PeerTypeChat, chat.ID)
+		if params.RoomID != "" {
+			portal, err := t.main.Bridge.GetPortalByKey(ctx, portalKey)
+			if err != nil {
+				return nil, err
+			}
+			err = portal.UpdateMatrixRoomID(ctx, params.RoomID, bridgev2.UpdateMatrixRoomIDParams{
+				SyncDBMetadata: func() {
+					portal.Name = req.Title
+					portal.NameSet = true
+				},
+				OverwriteOldPortal: true,
+				TombstoneOldRoom:   true,
+				DeleteOldRoom:      true,
+				ChatInfoSource:     t.userLogin,
+			})
+			if err != nil {
+				return nil, err
+			}
+		}
 		return &bridgev2.CreateChatResponse{
-			PortalKey: t.makePortalKeyFromID(ids.PeerTypeChat, chat.ID),
+			PortalKey: portalKey,
 		}, nil
 	}
 }

@@ -25,8 +25,10 @@ import (
 	"image"
 	_ "image/jpeg"
 	_ "image/png"
+	"math"
 	"math/rand/v2"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -36,9 +38,11 @@ import (
 	"go.mau.fi/util/ffmpeg"
 	"go.mau.fi/util/variationselector"
 	"go.mau.fi/webp"
+	"golang.org/x/exp/maps"
 	"maunium.net/go/mautrix/bridgev2"
 	"maunium.net/go/mautrix/bridgev2/database"
 	"maunium.net/go/mautrix/bridgev2/networkid"
+	"maunium.net/go/mautrix/bridgev2/simplevent"
 	"maunium.net/go/mautrix/event"
 	"maunium.net/go/mautrix/id"
 
@@ -51,6 +55,19 @@ import (
 	"go.mau.fi/mautrix-telegram/pkg/connector/ids"
 	"go.mau.fi/mautrix-telegram/pkg/connector/matrixfmt"
 	"go.mau.fi/mautrix-telegram/pkg/connector/waveform"
+)
+
+var (
+	_ bridgev2.EditHandlingNetworkAPI           = (*TelegramClient)(nil)
+	_ bridgev2.ReactionHandlingNetworkAPI       = (*TelegramClient)(nil)
+	_ bridgev2.RedactionHandlingNetworkAPI      = (*TelegramClient)(nil)
+	_ bridgev2.ReadReceiptHandlingNetworkAPI    = (*TelegramClient)(nil)
+	_ bridgev2.TypingHandlingNetworkAPI         = (*TelegramClient)(nil)
+	_ bridgev2.DisappearTimerChangingNetworkAPI = (*TelegramClient)(nil)
+	_ bridgev2.MuteHandlingNetworkAPI           = (*TelegramClient)(nil)
+	_ bridgev2.TagHandlingNetworkAPI            = (*TelegramClient)(nil)
+	_ bridgev2.ChatViewingNetworkAPI            = (*TelegramClient)(nil)
+	_ bridgev2.DeleteChatHandlingNetworkAPI     = (*TelegramClient)(nil)
 )
 
 func getMediaFilename(content *event.MessageEventContent) (filename string) {
@@ -69,6 +86,23 @@ func getMediaFilename(content *event.MessageEventContent) (filename string) {
 		return filename + ".jpg" // Assume it's a JPEG
 	}
 	return filename
+}
+
+func (t *TelegramClient) HandleMatrixViewingChat(ctx context.Context, msg *bridgev2.MatrixViewingChat) error {
+	if msg.Portal == nil {
+		return nil
+	}
+	meta := msg.Portal.Metadata.(*PortalMetadata)
+	if meta.LastSync.Add(24 * time.Hour).Before(time.Now()) {
+		t.userLogin.QueueRemoteEvent(&simplevent.ChatResync{
+			EventMeta: simplevent.EventMeta{
+				Type:      bridgev2.RemoteEventChatResync,
+				PortalKey: msg.Portal.PortalKey,
+			},
+			GetChatInfoFunc: t.GetChatInfo,
+		})
+	}
+	return nil
 }
 
 func (t *TelegramClient) transferMediaToTelegram(ctx context.Context, content *event.MessageEventContent, sticker bool) (tg.InputMediaClass, error) {
@@ -713,6 +747,55 @@ func (t *TelegramClient) HandleMatrixTyping(ctx context.Context, msg *bridgev2.M
 	_, err = t.client.API().MessagesSetTyping(ctx, &tg.MessagesSetTypingRequest{
 		Peer:   inputPeer,
 		Action: &tg.SendMessageTypingAction{},
+	})
+	return err
+}
+
+func (t *TelegramClient) HandleMatrixDisappearingTimer(ctx context.Context, msg *bridgev2.MatrixDisappearingTimer) (bool, error) {
+	inputPeer, err := t.inputPeerForPortalID(ctx, msg.Portal.ID)
+	if err != nil {
+		return false, err
+	}
+	_, err = t.client.API().MessagesSetHistoryTTL(ctx, &tg.MessagesSetHistoryTTLRequest{
+		Peer:   inputPeer,
+		Period: int(msg.Content.Timer.Seconds()),
+	})
+	if err == nil {
+		msg.Portal.Disappear = database.DisappearingSetting{
+			Type:  event.DisappearingTypeAfterSend,
+			Timer: msg.Content.Timer.Duration,
+		}.Normalize()
+	}
+	return err == nil, err
+}
+
+func (t *TelegramClient) HandleMute(ctx context.Context, msg *bridgev2.MatrixMute) error {
+	inputPeer, err := t.inputPeerForPortalID(ctx, msg.Portal.ID)
+	if err != nil {
+		return err
+	}
+
+	settings := tg.InputPeerNotifySettings{
+		Silent:    msg.Content.IsMuted(),
+		MuteUntil: int(max(0, min(msg.Content.GetMutedUntilTime().Unix(), math.MaxInt32))),
+	}
+
+	_, err = t.client.API().AccountUpdateNotifySettings(ctx, &tg.AccountUpdateNotifySettingsRequest{
+		Peer:     &tg.InputNotifyPeer{Peer: inputPeer},
+		Settings: settings,
+	})
+	return err
+}
+
+func (t *TelegramClient) HandleRoomTag(ctx context.Context, msg *bridgev2.MatrixRoomTag) error {
+	inputPeer, err := t.inputPeerForPortalID(ctx, msg.Portal.ID)
+	if err != nil {
+		return err
+	}
+
+	_, err = t.client.API().MessagesToggleDialogPin(ctx, &tg.MessagesToggleDialogPinRequest{
+		Pinned: slices.Contains(maps.Keys(msg.Content.Tags), event.RoomTagFavourite),
+		Peer:   &tg.InputDialogPeer{Peer: inputPeer},
 	})
 	return err
 }

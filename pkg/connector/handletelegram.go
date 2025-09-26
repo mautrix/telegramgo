@@ -21,7 +21,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"slices"
 	"strings"
 	"time"
@@ -37,14 +36,13 @@ import (
 	"maunium.net/go/mautrix/bridgev2/status"
 	"maunium.net/go/mautrix/event"
 
-	"go.mau.fi/mautrix-telegram/pkg/gotd/tg"
-	"go.mau.fi/mautrix-telegram/pkg/gotd/tgerr"
-
 	"go.mau.fi/mautrix-telegram/pkg/connector/emojis"
 	"go.mau.fi/mautrix-telegram/pkg/connector/ids"
 	"go.mau.fi/mautrix-telegram/pkg/connector/media"
 	"go.mau.fi/mautrix-telegram/pkg/connector/tljson"
 	"go.mau.fi/mautrix-telegram/pkg/connector/util"
+	"go.mau.fi/mautrix-telegram/pkg/gotd/tg"
+	"go.mau.fi/mautrix-telegram/pkg/gotd/tgerr"
 )
 
 type IGetMessage interface {
@@ -357,31 +355,16 @@ func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, entities tg.Ent
 				return err
 			}
 		case *tg.MessageActionSetMessagesTTL:
-			res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatResync{
-				EventMeta: eventMeta.WithType(bridgev2.RemoteEventChatResync),
-				ChatInfo: &bridgev2.ChatInfo{
-					ExtraUpdates: func(ctx context.Context, p *bridgev2.Portal) bool {
-						updated := p.Portal.Metadata.(*PortalMetadata).MessagesTTL != action.Period
-						p.Portal.Metadata.(*PortalMetadata).MessagesTTL = action.Period
-						return updated
+			setting := database.DisappearingSetting{
+				Type:  event.DisappearingTypeAfterSend,
+				Timer: time.Duration(action.Period) * time.Second,
+			}.Normalize()
+			res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatInfoChange{
+				EventMeta: eventMeta.WithType(bridgev2.RemoteEventChatInfoChange),
+				ChatInfoChange: &bridgev2.ChatInfoChange{
+					ChatInfo: &bridgev2.ChatInfo{
+						Disappear: &setting,
 					},
-				},
-			})
-			if err := resultToError(res); err != nil {
-				return err
-			}
-
-			// Send a notice about the TTL change
-			content := bridgev2.DisappearingMessageNotice(time.Duration(action.Period)*time.Second, false)
-			res = t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.Message[any]{
-				EventMeta: eventMeta.WithType(bridgev2.RemoteEventMessage),
-				ID:        ids.GetMessageIDFromMessage(msg),
-				ConvertMessageFunc: func(ctx context.Context, portal *bridgev2.Portal, intent bridgev2.MatrixAPI, data any) (*bridgev2.ConvertedMessage, error) {
-					return &bridgev2.ConvertedMessage{
-						Parts: []*bridgev2.ConvertedMessagePart{
-							{Type: event.EventMessage, Content: content},
-						},
-					}, nil
 				},
 			})
 			if err := resultToError(res); err != nil {
@@ -1188,24 +1171,6 @@ func (t *TelegramClient) onNotifySettings(ctx context.Context, e tg.Entities, up
 	return resultToError(res)
 }
 
-func (t *TelegramClient) HandleMute(ctx context.Context, msg *bridgev2.MatrixMute) error {
-	inputPeer, err := t.inputPeerForPortalID(ctx, msg.Portal.ID)
-	if err != nil {
-		return err
-	}
-
-	settings := tg.InputPeerNotifySettings{
-		Silent:    msg.Content.IsMuted(),
-		MuteUntil: int(max(0, min(msg.Content.GetMutedUntilTime().Unix(), math.MaxInt32))),
-	}
-
-	_, err = t.client.API().AccountUpdateNotifySettings(ctx, &tg.AccountUpdateNotifySettingsRequest{
-		Peer:     &tg.InputNotifyPeer{Peer: inputPeer},
-		Settings: settings,
-	})
-	return err
-}
-
 func (t *TelegramClient) onPinnedDialogs(ctx context.Context, e tg.Entities, msg *tg.UpdatePinnedDialogs) error {
 	needsUnpinning := map[networkid.PortalKey]struct{}{}
 	for _, portalID := range t.userLogin.Metadata.(*UserLoginMetadata).PinnedDialogs {
@@ -1263,19 +1228,6 @@ func (t *TelegramClient) onPinnedDialogs(ctx context.Context, e tg.Entities, msg
 	}
 
 	return t.userLogin.Save(ctx)
-}
-
-func (t *TelegramClient) HandleRoomTag(ctx context.Context, msg *bridgev2.MatrixRoomTag) error {
-	inputPeer, err := t.inputPeerForPortalID(ctx, msg.Portal.ID)
-	if err != nil {
-		return err
-	}
-
-	_, err = t.client.API().MessagesToggleDialogPin(ctx, &tg.MessagesToggleDialogPinRequest{
-		Pinned: slices.Contains(maps.Keys(msg.Content.Tags), event.RoomTagFavourite),
-		Peer:   &tg.InputDialogPeer{Peer: inputPeer},
-	})
-	return err
 }
 
 func (t *TelegramClient) onChatDefaultBannedRights(ctx context.Context, entities tg.Entities, update *tg.UpdateChatDefaultBannedRights) error {

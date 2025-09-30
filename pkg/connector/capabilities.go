@@ -221,7 +221,6 @@ func (t *TelegramClient) GetCapabilities(ctx context.Context, portal *bridgev2.P
 		ReactionCount:       1,
 		ReadReceipts:        true,
 		TypingNotifications: true,
-		DeleteChat:          true,
 
 		DisappearingTimer: &event.DisappearingTimerCapability{
 			Types:  []event.DisappearingType{event.DisappearingTypeAfterSend},
@@ -254,6 +253,7 @@ func (t *TelegramClient) GetCapabilities(ctx context.Context, portal *bridgev2.P
 	}
 	if portal.RoomType == database.RoomTypeDM {
 		baseID += "+dm"
+		feat.DeleteChat = true
 		feat.DeleteChatForEveryone = true
 	}
 	feat.ID = baseID

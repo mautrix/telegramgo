@@ -763,23 +763,8 @@ func (t *TelegramClient) HandleMatrixDeleteChat(ctx context.Context, chat *bridg
 		if err != nil {
 			return err
 		}
-	case ids.PeerTypeChat:
-		_, err := t.client.API().MessagesDeleteChat(ctx, id)
-		if err != nil {
-			return err
-		}
-	case ids.PeerTypeChannel:
-		if accessHash, err := t.ScopedStore.GetAccessHash(ctx, ids.PeerTypeChannel, id); err != nil {
-			return err
-		} else {
-			_, err := t.client.API().ChannelsLeaveChannel(ctx, &tg.InputChannel{
-				ChannelID:  id,
-				AccessHash: accessHash,
-			})
-			if err != nil {
-				return err
-			}
-		}
+	default:
+		return fmt.Errorf("deleting chat not supported for peer type %s", peerType)
 	}
 	return nil
 }

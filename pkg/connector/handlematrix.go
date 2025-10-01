@@ -67,6 +67,7 @@ var (
 	_ bridgev2.MuteHandlingNetworkAPI           = (*TelegramClient)(nil)
 	_ bridgev2.TagHandlingNetworkAPI            = (*TelegramClient)(nil)
 	_ bridgev2.ChatViewingNetworkAPI            = (*TelegramClient)(nil)
+	_ bridgev2.DeleteChatHandlingNetworkAPI     = (*TelegramClient)(nil)
 )
 
 func getMediaFilename(content *event.MessageEventContent) (filename string) {

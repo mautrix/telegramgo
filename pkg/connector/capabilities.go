@@ -26,6 +26,7 @@ import (
 	"go.mau.fi/util/ptr"
 	"go.mau.fi/util/variationselector"
 	"maunium.net/go/mautrix/bridgev2"
+	"maunium.net/go/mautrix/bridgev2/database"
 	"maunium.net/go/mautrix/event"
 )
 
@@ -57,7 +58,7 @@ func (tg *TelegramConnector) GetCapabilities() *bridgev2.NetworkGeneralCapabilit
 }
 
 func (tg *TelegramConnector) GetBridgeInfoVersion() (info, capabilities int) {
-	return 1, 5
+	return 1, 6
 }
 
 // TODO get these from getConfig instead of hardcoding?
@@ -207,7 +208,7 @@ func makeTimerList() []jsontime.Milliseconds {
 var telegramTimers = makeTimerList()
 
 func (t *TelegramClient) GetCapabilities(ctx context.Context, portal *bridgev2.Portal) *event.RoomFeatures {
-	baseID := "fi.mau.telegram.capabilities.2025_09_16"
+	baseID := "fi.mau.telegram.capabilities.2025_09_27"
 	feat := &event.RoomFeatures{
 		Formatting:          formattingCaps,
 		File:                fileCaps,
@@ -249,6 +250,11 @@ func (t *TelegramClient) GetCapabilities(ctx context.Context, portal *bridgev2.P
 		baseID += "+premium"
 		feat.File = premiumFileCaps
 		feat.ReactionCount = 3
+	}
+	if portal.RoomType == database.RoomTypeDM {
+		baseID += "+dm"
+		feat.DeleteChat = true
+		feat.DeleteChatForEveryone = true
 	}
 	feat.ID = baseID
 	return feat

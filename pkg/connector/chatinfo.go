@@ -145,8 +145,11 @@ func (t *TelegramClient) getGroupChatInfo(fullChat *tg.MessagesChatFull, chatID 
 		Members: &bridgev2.ChatMemberList{
 			IsFull:    true,
 			MemberMap: map[networkid.UserID]bridgev2.ChatMember{},
+
+			ExcludeChangesFromTimeline: true,
 		},
-		CanBackfill: true,
+		CanBackfill:                true,
+		ExcludeChangesFromTimeline: true,
 		ExtraUpdates: func(ctx context.Context, p *bridgev2.Portal) bool {
 			meta := p.Metadata.(*PortalMetadata)
 			_ = updatePortalLastSyncAt(ctx, p)

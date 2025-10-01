@@ -22,7 +22,7 @@ require (
 	github.com/rs/zerolog v1.34.0
 	github.com/stretchr/testify v1.11.1
 	github.com/tidwall/gjson v1.18.0
-	go.mau.fi/util v0.9.1
+	go.mau.fi/util v0.9.2-0.20251001114608-d99877b9cc10
 	go.mau.fi/webp v0.2.0
 	go.mau.fi/zerozap v0.1.2
 	go.opentelemetry.io/otel v1.37.0
@@ -36,7 +36,7 @@ require (
 	golang.org/x/sync v0.17.0
 	golang.org/x/tools v0.37.0
 	gopkg.in/yaml.v3 v3.0.1
-	maunium.net/go/mautrix v0.25.2-0.20250924172949-cf29b07f32ce
+	maunium.net/go/mautrix v0.25.2-0.20251001115535-dd778ae0cdaf
 	rsc.io/qr v0.2.0
 )
 

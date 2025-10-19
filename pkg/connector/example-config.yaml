@@ -80,14 +80,13 @@ sync:
     # Whether or not to sync and create portals for direct chats at startup.
     direct_chats: false
 
-
 # Should the bridge send all unicode reactions as custom emoji reactions to
 # Telegram? By default, the bridge only uses custom emojis for unicode emojis
 # that aren't allowed in reactions.
 always_custom_emoji_reaction: false
 
 # The avatar to use for the Telegram Saved Messages chat
-saved_message_avatar: mxc://nevarro.space/ZzzyOSDZfyGjKRRbyDPTweAA
+saved_message_avatar: mxc://maunium.net/XhhfHoPejeneOngMyBbtyWDk
 
 # Create a new room and tombstone the old one when upgrading rooms
 always_tombstone_on_supergroup_migration: false

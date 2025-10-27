@@ -799,3 +799,29 @@ func (t *TelegramClient) HandleRoomTag(ctx context.Context, msg *bridgev2.Matrix
 	})
 	return err
 }
+
+func (t *TelegramClient) HandleMatrixDeleteChat(ctx context.Context, chat *bridgev2.MatrixDeleteChat) error {
+	peerType, id, err := ids.ParsePortalID(chat.Portal.ID)
+	if err != nil {
+		return err
+	}
+	if chat.Portal.RoomType == database.RoomTypeDM {
+		if chat.Content.DeleteForEveryone {
+			_, err := t.client.API().MessagesDeleteHistory(ctx, &tg.MessagesDeleteHistoryRequest{
+				Peer:   &tg.InputPeerUser{UserID: id},
+				Revoke: true,
+				MaxID:  0,
+			})
+			if err != nil {
+				return err
+			}
+		}
+		_, err = t.client.API().MessagesDeleteChat(ctx, id)
+		if err != nil {
+			return err
+		}
+	} else {
+		return fmt.Errorf("deleting chat not supported for peer type %s", peerType)
+	}
+	return nil
+}

@@ -805,22 +805,62 @@ func (t *TelegramClient) HandleMatrixDeleteChat(ctx context.Context, chat *bridg
 	if err != nil {
 		return err
 	}
-	if chat.Portal.RoomType == database.RoomTypeDM {
+	switch peerType {
+	case ids.PeerTypeUser:
+		accessHash, err := t.ScopedStore.GetAccessHash(ctx, peerType, id)
+		if err != nil {
+			return err
+		}
+		_, err = t.client.API().MessagesDeleteHistory(ctx, &tg.MessagesDeleteHistoryRequest{
+			Peer:      &tg.InputPeerUser{UserID: id, AccessHash: accessHash},
+			JustClear: !chat.Content.DeleteForEveryone,
+			Revoke:    chat.Content.DeleteForEveryone,
+			MaxID:     0,
+		})
+		if err != nil {
+			return err
+		}
+	case ids.PeerTypeChat:
 		if chat.Content.DeleteForEveryone {
-			_, err := t.client.API().MessagesDeleteHistory(ctx, &tg.MessagesDeleteHistoryRequest{
-				Peer:   &tg.InputPeerUser{UserID: id},
-				Revoke: true,
-				MaxID:  0,
+			result, err := t.client.API().MessagesDeleteChat(ctx, id)
+			if err != nil {
+				return err
+			}
+			if !result {
+				return fmt.Errorf("failed to delete chat %d", id)
+			}
+			return nil
+		} else {
+			_, err = t.client.API().MessagesDeleteChatUser(ctx, &tg.MessagesDeleteChatUserRequest{
+				ChatID: id,
+				UserID: &tg.InputUserSelf{},
 			})
 			if err != nil {
 				return err
 			}
 		}
-		_, err = t.client.API().MessagesDeleteChat(ctx, id)
+	case ids.PeerTypeChannel:
+		accessHash, err := t.ScopedStore.GetAccessHash(ctx, peerType, id)
 		if err != nil {
 			return err
 		}
-	} else {
+		channel := &tg.InputChannel{
+			ChannelID:  id,
+			AccessHash: accessHash,
+		}
+		if chat.Content.DeleteForEveryone {
+			_, err := t.client.API().ChannelsDeleteChannel(ctx, channel)
+			if err != nil {
+				return err
+			}
+			return nil
+		} else {
+			_, err = t.client.API().ChannelsLeaveChannel(ctx, &tg.InputChannel{
+				ChannelID:  id,
+				AccessHash: accessHash,
+			})
+		}
+	default:
 		return fmt.Errorf("deleting chat not supported for peer type %s", peerType)
 	}
 	return nil

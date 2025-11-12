@@ -155,6 +155,19 @@ func (t *TelegramClient) getGroupChatInfo(fullChat *tg.MessagesChatFull, chatID 
 			_ = updatePortalLastSyncAt(ctx, p)
 			_ = meta.SetIsSuperGroup(isMegagroup)
 
+			// Check if current user is the creator
+			for _, c := range fullChat.GetChats() {
+				if c.GetID() == chatID {
+					switch chat := c.(type) {
+					case *tg.Chat:
+						meta.IsGroupCreator = chat.Creator
+					case *tg.Channel:
+						meta.IsGroupCreator = chat.Creator
+					}
+					break
+				}
+			}
+
 			if reactions, ok := fullChat.FullChat.GetAvailableReactions(); ok {
 				switch typedReactions := reactions.(type) {
 				case *tg.ChatReactionsAll:

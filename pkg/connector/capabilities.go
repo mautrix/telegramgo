@@ -251,21 +251,23 @@ func (t *TelegramClient) GetCapabilities(ctx context.Context, portal *bridgev2.P
 		feat.File = premiumFileCaps
 		feat.ReactionCount = 3
 	}
-	feat.ID = baseID
 	portalMetadata := portal.Metadata.(*PortalMetadata)
-	if portal.RoomType == database.RoomTypeDM {
+
+	switch portal.RoomType {
+	case database.RoomTypeDM:
 		baseID += "+dm"
 		feat.DeleteChat = true
 		feat.DeleteChatForEveryone = true
-	} else if portal.RoomType == database.RoomTypeGroupDM {
-		if portalMetadata.IsGroupCreator {
-			feat.ID = string(portal.MXID)
-			// TODO: supergroup: disable delete chat for >1000 membrs
+	case database.RoomTypeGroupDM:
+		baseID += "+group"
+		feat.DeleteChat = true
+		// Group creators can delete the chat for everyone, unless it's a large supergroup
+		if portalMetadata.IsGroupCreator && !(portalMetadata.IsSuperGroup && portalMetadata.MemberCount > 1000) {
+			baseID += "+group_owner"
 			feat.DeleteChatForEveryone = true
-		} else {
-			baseID += "+group"
-			feat.DeleteChat = true
 		}
 	}
+
+	feat.ID = baseID
 	return feat
 }

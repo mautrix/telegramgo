@@ -204,6 +204,8 @@ func (t *Transferer) WithPhoto(pc tg.PhotoClass) *ReadyTransferer {
 	photo := pc.(*tg.Photo)
 	var largest tg.PhotoSizeClass
 	t.fileInfo.Width, t.fileInfo.Height, t.fileInfo.Size, largest = getLargestPhotoSize(photo.GetSizes())
+	// All photos are jpeg in Telegram
+	t.fileInfo.MimeType = "image/jpeg"
 	return &ReadyTransferer{
 		inner: t,
 		loc: &tg.InputPhotoFileLocation{
@@ -357,9 +359,7 @@ func (t *ReadyTransferer) Stream(ctx context.Context) (r io.Reader, mimeType str
 		case *tg.StorageFileWebp:
 			t.inner.fileInfo.MimeType = "image/webp"
 		default:
-			// Just guess it's a JPEG. All documents should have specified the
-			// MIME type, and all photos are JPEG.
-			t.inner.fileInfo.MimeType = "image/jpeg"
+			t.inner.fileInfo.MimeType = "application/octet-stream"
 		}
 	}
 
@@ -409,7 +409,7 @@ func (t *ReadyTransferer) DirectDownloadURL(ctx context.Context, loggedInUserID 
 	}
 	mxc, err := portal.Bridge.Matrix.GenerateContentURI(ctx, mediaID)
 	if t.inner.fileInfo.MimeType == "" {
-		t.inner.fileInfo.MimeType = "image/jpeg"
+		t.inner.fileInfo.MimeType = "application/octet-stream"
 	}
 	if t.inner.fileInfo.MimeType == "application/x-tgsticker" {
 		t.inner.fileInfo.MimeType = "video/lottie+json"

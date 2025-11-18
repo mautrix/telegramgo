@@ -164,7 +164,7 @@ func (t *TelegramClient) getGroupChatInfo(fullChat *tg.MessagesChatFull, chatID 
 					case *tg.Channel:
 						meta.IsGroupCreator = chat.Creator
 						if value, ok := chat.GetParticipantsCount(); ok {
-							meta.MemberCount = value
+							meta.ParticipantsCount = value
 						}
 					}
 					break

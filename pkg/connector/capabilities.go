@@ -259,9 +259,8 @@ func (t *TelegramClient) GetCapabilities(ctx context.Context, portal *bridgev2.P
 		feat.DeleteChat = true
 		feat.DeleteChatForEveryone = true
 	case database.RoomTypeGroupDM:
-		baseID += "+group"
 		// Group creators can delete the chat for everyone, unless it's a large supergroup
-		if portalMetadata.IsGroupCreator && !(portalMetadata.IsSuperGroup && portalMetadata.MemberCount > 1000) {
+		if portalMetadata.IsGroupCreator && !(portalMetadata.IsSuperGroup && portalMetadata.ParticipantsCount > 1000) {
 			baseID += "+group_owner"
 			feat.DeleteChatForEveryone = true
 		}

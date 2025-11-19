@@ -28,6 +28,8 @@ import (
 	"maunium.net/go/mautrix/bridgev2"
 	"maunium.net/go/mautrix/bridgev2/database"
 	"maunium.net/go/mautrix/event"
+
+	"go.mau.fi/mautrix-telegram/pkg/connector/ids"
 )
 
 func (tg *TelegramConnector) GetCapabilities() *bridgev2.NetworkGeneralCapabilities {
@@ -252,6 +254,7 @@ func (t *TelegramClient) GetCapabilities(ctx context.Context, portal *bridgev2.P
 		feat.ReactionCount = 3
 	}
 	portalMetadata := portal.Metadata.(*PortalMetadata)
+	peerType, _, _ := ids.ParsePortalID(portal.ID)
 
 	switch portal.RoomType {
 	case database.RoomTypeDM:
@@ -259,8 +262,8 @@ func (t *TelegramClient) GetCapabilities(ctx context.Context, portal *bridgev2.P
 		feat.DeleteChat = true
 		feat.DeleteChatForEveryone = true
 	default:
-		// Group creators can delete the chat for everyone, unless it's a large supergroup
-		if !portalMetadata.IsSuperGroup || portalMetadata.IsSuperGroup && portalMetadata.ParticipantsCount > 1000 {
+		// Group creators can delete the chat for everyone, unless it's a large channel
+		if peerType == ids.PeerTypeChat || peerType == ids.PeerTypeChannel && portalMetadata.ParticipantsCount < 1000 {
 			baseID += "+group"
 			feat.DeleteChatForEveryone = true
 		}

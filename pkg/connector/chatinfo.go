@@ -155,6 +155,19 @@ func (t *TelegramClient) getGroupChatInfo(fullChat *tg.MessagesChatFull, chatID 
 			_ = updatePortalLastSyncAt(ctx, p)
 			_ = meta.SetIsSuperGroup(isMegagroup)
 
+			for _, c := range fullChat.GetChats() {
+				if c.GetID() != chatID {
+					continue
+				}
+
+				if chat, ok := c.(*tg.Channel); ok {
+					if value, ok := chat.GetParticipantsCount(); ok {
+						meta.ParticipantsCount = value
+					}
+				}
+				break
+			}
+
 			if reactions, ok := fullChat.FullChat.GetAvailableReactions(); ok {
 				switch typedReactions := reactions.(type) {
 				case *tg.ChatReactionsAll:

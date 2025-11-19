@@ -125,6 +125,7 @@ func (t *TelegramClient) getDMChatInfo(ctx context.Context, userID int64) (*brid
 func (t *TelegramClient) getGroupChatInfo(fullChat *tg.MessagesChatFull, chatID int64) (*bridgev2.ChatInfo, bool, error) {
 	var name *string
 	var isBroadcastChannel, isMegagroup bool
+	var participantsCount int
 	for _, c := range fullChat.GetChats() {
 		if c.GetID() == chatID {
 			switch chat := c.(type) {
@@ -134,6 +135,10 @@ func (t *TelegramClient) getGroupChatInfo(fullChat *tg.MessagesChatFull, chatID 
 				name = &chat.Title
 				isBroadcastChannel = chat.Broadcast
 				isMegagroup = chat.Megagroup
+
+				if value, ok := chat.GetParticipantsCount(); ok {
+					participantsCount = value
+				}
 			}
 			break
 		}
@@ -154,6 +159,7 @@ func (t *TelegramClient) getGroupChatInfo(fullChat *tg.MessagesChatFull, chatID 
 			meta := p.Metadata.(*PortalMetadata)
 			_ = updatePortalLastSyncAt(ctx, p)
 			_ = meta.SetIsSuperGroup(isMegagroup)
+			meta.ParticipantsCount = participantsCount
 
 			if reactions, ok := fullChat.FullChat.GetAvailableReactions(); ok {
 				switch typedReactions := reactions.(type) {
@@ -444,6 +450,7 @@ func (t *TelegramClient) getDMPowerLevels(ghost *bridgev2.Ghost) *bridgev2.Power
 		event.StateRoomAvatar:              0,
 		event.StateTopic:                   0,
 		event.StateBeeperDisappearingTimer: 0,
+		event.BeeperDeleteChat:             0,
 	}
 	return &plo
 }
@@ -500,6 +507,7 @@ func (t *TelegramClient) getPowerLevelOverridesFromBannedRights(entity tg.ChatCl
 		event.StatePowerLevels:             85,
 		event.StateHistoryVisibility:       85,
 		event.StateBeeperDisappearingTimer: 85,
+		event.BeeperDeleteChat:             *creatorPowerLevel,
 	}
 
 	if dbr.ChangeInfo {

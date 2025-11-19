@@ -28,6 +28,8 @@ import (
 	"maunium.net/go/mautrix/bridgev2"
 	"maunium.net/go/mautrix/bridgev2/database"
 	"maunium.net/go/mautrix/event"
+
+	"go.mau.fi/mautrix-telegram/pkg/connector/ids"
 )
 
 func (tg *TelegramConnector) GetCapabilities() *bridgev2.NetworkGeneralCapabilities {
@@ -58,7 +60,7 @@ func (tg *TelegramConnector) GetCapabilities() *bridgev2.NetworkGeneralCapabilit
 }
 
 func (tg *TelegramConnector) GetBridgeInfoVersion() (info, capabilities int) {
-	return 1, 6
+	return 1, 7
 }
 
 // TODO get these from getConfig instead of hardcoding?
@@ -208,7 +210,7 @@ func makeTimerList() []jsontime.Milliseconds {
 var telegramTimers = makeTimerList()
 
 func (t *TelegramClient) GetCapabilities(ctx context.Context, portal *bridgev2.Portal) *event.RoomFeatures {
-	baseID := "fi.mau.telegram.capabilities.2025_09_27"
+	baseID := "fi.mau.telegram.capabilities.2025_11_12"
 	feat := &event.RoomFeatures{
 		Formatting:          formattingCaps,
 		File:                fileCaps,
@@ -251,11 +253,22 @@ func (t *TelegramClient) GetCapabilities(ctx context.Context, portal *bridgev2.P
 		feat.File = premiumFileCaps
 		feat.ReactionCount = 3
 	}
-	if portal.RoomType == database.RoomTypeDM {
+	portalMetadata := portal.Metadata.(*PortalMetadata)
+	peerType, _, _ := ids.ParsePortalID(portal.ID)
+
+	switch portal.RoomType {
+	case database.RoomTypeDM:
 		baseID += "+dm"
 		feat.DeleteChat = true
 		feat.DeleteChatForEveryone = true
+	default:
+		// Group creators can delete the chat for everyone, unless it's a large channel
+		if peerType == ids.PeerTypeChat || portalMetadata.ParticipantsCount < 1000 {
+			baseID += "+deletablegroup"
+			feat.DeleteChatForEveryone = true
+		}
 	}
+
 	feat.ID = baseID
 	return feat
 }

@@ -50,10 +50,11 @@ type GhostMetadata struct {
 }
 
 type PortalMetadata struct {
-	IsSuperGroup     bool          `json:"is_supergroup,omitempty"`
-	ReadUpTo         int           `json:"read_up_to,omitempty"`
-	AllowedReactions []string      `json:"allowed_reactions"`
-	LastSync         jsontime.Unix `json:"last_sync,omitempty"`
+	IsSuperGroup      bool          `json:"is_supergroup,omitempty"`
+	ReadUpTo          int           `json:"read_up_to,omitempty"`
+	AllowedReactions  []string      `json:"allowed_reactions"`
+	LastSync          jsontime.Unix `json:"last_sync,omitempty"`
+	ParticipantsCount int           `json:"member_count,omitempty"`
 }
 
 func (pm *PortalMetadata) SetIsSuperGroup(isSupergroup bool) (changed bool) {

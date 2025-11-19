@@ -125,6 +125,7 @@ func (t *TelegramClient) getDMChatInfo(ctx context.Context, userID int64) (*brid
 func (t *TelegramClient) getGroupChatInfo(fullChat *tg.MessagesChatFull, chatID int64) (*bridgev2.ChatInfo, bool, error) {
 	var name *string
 	var isBroadcastChannel, isMegagroup bool
+	var participantsCount int
 	for _, c := range fullChat.GetChats() {
 		if c.GetID() == chatID {
 			switch chat := c.(type) {
@@ -134,6 +135,10 @@ func (t *TelegramClient) getGroupChatInfo(fullChat *tg.MessagesChatFull, chatID 
 				name = &chat.Title
 				isBroadcastChannel = chat.Broadcast
 				isMegagroup = chat.Megagroup
+
+				if value, ok := chat.GetParticipantsCount(); ok {
+					participantsCount = value
+				}
 			}
 			break
 		}
@@ -154,19 +159,7 @@ func (t *TelegramClient) getGroupChatInfo(fullChat *tg.MessagesChatFull, chatID 
 			meta := p.Metadata.(*PortalMetadata)
 			_ = updatePortalLastSyncAt(ctx, p)
 			_ = meta.SetIsSuperGroup(isMegagroup)
-
-			for _, c := range fullChat.GetChats() {
-				if c.GetID() != chatID {
-					continue
-				}
-
-				if chat, ok := c.(*tg.Channel); ok {
-					if value, ok := chat.GetParticipantsCount(); ok {
-						meta.ParticipantsCount = value
-					}
-				}
-				break
-			}
+			meta.ParticipantsCount = participantsCount
 
 			if reactions, ok := fullChat.FullChat.GetAvailableReactions(); ok {
 				switch typedReactions := reactions.(type) {

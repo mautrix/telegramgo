@@ -263,8 +263,8 @@ func (t *TelegramClient) GetCapabilities(ctx context.Context, portal *bridgev2.P
 		feat.DeleteChatForEveryone = true
 	default:
 		// Group creators can delete the chat for everyone, unless it's a large channel
-		if peerType == ids.PeerTypeChat || peerType == ids.PeerTypeChannel && portalMetadata.ParticipantsCount < 1000 {
-			baseID += "+group"
+		if peerType == ids.PeerTypeChat || portalMetadata.ParticipantsCount < 1000 {
+			baseID += "+deletablegroup"
 			feat.DeleteChatForEveryone = true
 		}
 	}

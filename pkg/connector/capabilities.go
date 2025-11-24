@@ -60,7 +60,7 @@ func (tg *TelegramConnector) GetCapabilities() *bridgev2.NetworkGeneralCapabilit
 }
 
 func (tg *TelegramConnector) GetBridgeInfoVersion() (info, capabilities int) {
-	return 1, 7
+	return 1, 8
 }
 
 // TODO get these from getConfig instead of hardcoding?
@@ -210,7 +210,7 @@ func makeTimerList() []jsontime.Milliseconds {
 var telegramTimers = makeTimerList()
 
 func (t *TelegramClient) GetCapabilities(ctx context.Context, portal *bridgev2.Portal) *event.RoomFeatures {
-	baseID := "fi.mau.telegram.capabilities.2025_11_12"
+	baseID := "fi.mau.telegram.capabilities.2025_11_24"
 	feat := &event.RoomFeatures{
 		Formatting:          formattingCaps,
 		File:                fileCaps,
@@ -227,6 +227,9 @@ func (t *TelegramClient) GetCapabilities(ctx context.Context, portal *bridgev2.P
 		DisappearingTimer: &event.DisappearingTimerCapability{
 			Types:  []event.DisappearingType{event.DisappearingTypeAfterSend},
 			Timers: telegramTimers,
+		},
+		State: event.StateFeatureMap{
+			event.StateRoomName.Type: {Level: event.CapLevelFullySupported},
 		},
 	}
 	// TODO non-admins can only edit messages within 48 hours
@@ -261,6 +264,7 @@ func (t *TelegramClient) GetCapabilities(ctx context.Context, portal *bridgev2.P
 		baseID += "+dm"
 		feat.DeleteChat = true
 		feat.DeleteChatForEveryone = true
+		feat.State = nil
 	default:
 		// Group creators can delete the chat for everyone, unless it's a large channel
 		if peerType == ids.PeerTypeChat || portalMetadata.ParticipantsCount < 1000 {

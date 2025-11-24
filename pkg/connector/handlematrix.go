@@ -68,6 +68,7 @@ var (
 	_ bridgev2.TagHandlingNetworkAPI            = (*TelegramClient)(nil)
 	_ bridgev2.ChatViewingNetworkAPI            = (*TelegramClient)(nil)
 	_ bridgev2.DeleteChatHandlingNetworkAPI     = (*TelegramClient)(nil)
+	_ bridgev2.RoomNameHandlingNetworkAPI       = (*TelegramClient)(nil)
 )
 
 func getMediaFilename(content *event.MessageEventContent) (filename string) {
@@ -855,4 +856,41 @@ func (t *TelegramClient) HandleMatrixDeleteChat(ctx context.Context, chat *bridg
 		return fmt.Errorf("deleting chat not supported for peer type %s", peerType)
 	}
 	return nil
+}
+
+func (t *TelegramClient) HandleMatrixRoomName(ctx context.Context, msg *bridgev2.MatrixRoomName) (bool, error) {
+	peerType, id, err := ids.ParsePortalID(msg.Portal.ID)
+	if err != nil {
+		return false, err
+	}
+
+	switch peerType {
+	case ids.PeerTypeChat:
+		_, err = t.client.API().MessagesEditChatTitle(ctx, &tg.MessagesEditChatTitleRequest{
+			ChatID: id,
+			Title:  msg.Content.Name,
+		})
+		if err != nil {
+			return false, err
+		}
+		return true, nil
+	case ids.PeerTypeChannel:
+		accessHash, err := t.ScopedStore.GetAccessHash(ctx, peerType, id)
+		if err != nil {
+			return false, err
+		}
+		_, err = t.client.API().ChannelsEditTitle(ctx, &tg.ChannelsEditTitleRequest{
+			Channel: &tg.InputChannel{
+				ChannelID:  id,
+				AccessHash: accessHash,
+			},
+			Title: msg.Content.Name,
+		})
+		if err != nil {
+			return false, err
+		}
+		return true, nil
+	default:
+		return false, fmt.Errorf("unsupported peer type %s for changing room name", peerType)
+	}
 }

@@ -69,6 +69,7 @@ var (
 	_ bridgev2.ChatViewingNetworkAPI            = (*TelegramClient)(nil)
 	_ bridgev2.DeleteChatHandlingNetworkAPI     = (*TelegramClient)(nil)
 	_ bridgev2.RoomNameHandlingNetworkAPI       = (*TelegramClient)(nil)
+	_ bridgev2.RoomAvatarHandlingNetworkAPI     = (*TelegramClient)(nil)
 )
 
 func getMediaFilename(content *event.MessageEventContent) (filename string) {
@@ -892,5 +893,61 @@ func (t *TelegramClient) HandleMatrixRoomName(ctx context.Context, msg *bridgev2
 		return true, nil
 	default:
 		return false, fmt.Errorf("unsupported peer type %s for changing room name", peerType)
+	}
+}
+
+func (t *TelegramClient) HandleMatrixRoomAvatar(ctx context.Context, msg *bridgev2.MatrixRoomAvatar) (bool, error) {
+	peerType, id, err := ids.ParsePortalID(msg.Portal.ID)
+	if err != nil {
+		return false, err
+	}
+
+	if peerType == ids.PeerTypeUser {
+		return false, fmt.Errorf("changing user avatar is not supported")
+	}
+
+	var photo tg.InputChatPhotoClass
+	if msg.Content.URL == "" && msg.Content.MSC3414File == nil {
+		photo = &tg.InputChatPhotoEmpty{}
+	} else {
+		data, err := t.main.Bridge.Bot.DownloadMedia(ctx, msg.Content.URL, msg.Content.MSC3414File)
+		if err != nil {
+			return false, fmt.Errorf("failed to download avatar: %w", err)
+		}
+		upload, err := uploader.NewUploader(t.client.API()).FromBytes(ctx, "avatar.jpg", data)
+		if err != nil {
+			return false, fmt.Errorf("failed to upload avatar: %w", err)
+		}
+		photo = &tg.InputChatUploadedPhoto{File: upload}
+	}
+
+	switch peerType {
+	case ids.PeerTypeChat:
+		_, err = t.client.API().MessagesEditChatPhoto(ctx, &tg.MessagesEditChatPhotoRequest{
+			ChatID: id,
+			Photo:  photo,
+		})
+		if err != nil {
+			return false, err
+		}
+		return true, nil
+	case ids.PeerTypeChannel:
+		accessHash, err := t.ScopedStore.GetAccessHash(ctx, peerType, id)
+		if err != nil {
+			return false, err
+		}
+		_, err = t.client.API().ChannelsEditPhoto(ctx, &tg.ChannelsEditPhotoRequest{
+			Channel: &tg.InputChannel{
+				ChannelID:  id,
+				AccessHash: accessHash,
+			},
+			Photo: photo,
+		})
+		if err != nil {
+			return false, err
+		}
+		return true, nil
+	default:
+		return false, fmt.Errorf("unsupported peer type %s for changing room avatar", peerType)
 	}
 }

@@ -229,7 +229,8 @@ func (t *TelegramClient) GetCapabilities(ctx context.Context, portal *bridgev2.P
 			Timers: telegramTimers,
 		},
 		State: event.StateFeatureMap{
-			event.StateRoomName.Type: {Level: event.CapLevelFullySupported},
+			event.StateRoomName.Type:   {Level: event.CapLevelFullySupported},
+			event.StateRoomAvatar.Type: {Level: event.CapLevelFullySupported},
 		},
 	}
 	// TODO non-admins can only edit messages within 48 hours

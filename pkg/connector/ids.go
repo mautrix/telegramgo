@@ -19,9 +19,8 @@ package connector
 import (
 	"maunium.net/go/mautrix/bridgev2/networkid"
 
-	"go.mau.fi/mautrix-telegram/pkg/gotd/tg"
-
 	"go.mau.fi/mautrix-telegram/pkg/connector/ids"
+	"go.mau.fi/mautrix-telegram/pkg/gotd/tg"
 )
 
 func (t *TelegramClient) makePortalKeyFromPeer(peer tg.PeerClass) networkid.PortalKey {

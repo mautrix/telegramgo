@@ -41,17 +41,16 @@ import (
 	"maunium.net/go/mautrix/bridgev2/status"
 	"maunium.net/go/mautrix/id"
 
-	"go.mau.fi/mautrix-telegram/pkg/gotd/telegram"
-	"go.mau.fi/mautrix-telegram/pkg/gotd/telegram/auth"
-	"go.mau.fi/mautrix-telegram/pkg/gotd/telegram/updates"
-	"go.mau.fi/mautrix-telegram/pkg/gotd/tg"
-
 	"go.mau.fi/mautrix-telegram/pkg/connector/humanise"
 	"go.mau.fi/mautrix-telegram/pkg/connector/ids"
 	"go.mau.fi/mautrix-telegram/pkg/connector/matrixfmt"
 	"go.mau.fi/mautrix-telegram/pkg/connector/store"
 	"go.mau.fi/mautrix-telegram/pkg/connector/telegramfmt"
 	"go.mau.fi/mautrix-telegram/pkg/connector/util"
+	"go.mau.fi/mautrix-telegram/pkg/gotd/telegram"
+	"go.mau.fi/mautrix-telegram/pkg/gotd/telegram/auth"
+	"go.mau.fi/mautrix-telegram/pkg/gotd/telegram/updates"
+	"go.mau.fi/mautrix-telegram/pkg/gotd/tg"
 )
 
 var (

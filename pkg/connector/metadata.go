@@ -19,12 +19,11 @@ package connector
 import (
 	"context"
 
+	"go.mau.fi/util/jsontime"
 	"maunium.net/go/mautrix/bridgev2"
 	"maunium.net/go/mautrix/bridgev2/database"
 	"maunium.net/go/mautrix/bridgev2/networkid"
 	"maunium.net/go/mautrix/id"
-
-	"go.mau.fi/util/jsontime"
 
 	"go.mau.fi/mautrix-telegram/pkg/gotd/crypto"
 	"go.mau.fi/mautrix-telegram/pkg/gotd/session"

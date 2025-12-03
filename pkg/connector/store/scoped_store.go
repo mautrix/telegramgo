@@ -25,9 +25,8 @@ import (
 
 	"go.mau.fi/util/dbutil"
 
-	"go.mau.fi/mautrix-telegram/pkg/gotd/telegram/updates"
-
 	"go.mau.fi/mautrix-telegram/pkg/connector/ids"
+	"go.mau.fi/mautrix-telegram/pkg/gotd/telegram/updates"
 )
 
 // ScopedStore is a wrapper around a database that implements

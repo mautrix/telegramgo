@@ -22,10 +22,9 @@ import (
 
 	"maunium.net/go/mautrix/event"
 
-	"go.mau.fi/mautrix-telegram/pkg/gotd/tg"
-
 	"go.mau.fi/mautrix-telegram/pkg/connector/ids"
 	"go.mau.fi/mautrix-telegram/pkg/connector/telegramfmt"
+	"go.mau.fi/mautrix-telegram/pkg/gotd/tg"
 )
 
 func toTelegramEntity(br telegramfmt.BodyRange) tg.MessageEntityClass {

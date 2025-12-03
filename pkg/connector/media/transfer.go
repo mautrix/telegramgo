@@ -24,17 +24,15 @@ import (
 	"net/http"
 
 	"github.com/rs/zerolog"
+	"go.mau.fi/util/gnuzip"
 	"maunium.net/go/mautrix/bridgev2"
 	"maunium.net/go/mautrix/event"
 	"maunium.net/go/mautrix/id"
 
-	"go.mau.fi/mautrix-telegram/pkg/gotd/telegram/downloader"
-	"go.mau.fi/mautrix-telegram/pkg/gotd/tg"
-
-	"go.mau.fi/util/gnuzip"
-
 	"go.mau.fi/mautrix-telegram/pkg/connector/ids"
 	"go.mau.fi/mautrix-telegram/pkg/connector/store"
+	"go.mau.fi/mautrix-telegram/pkg/gotd/telegram/downloader"
+	"go.mau.fi/mautrix-telegram/pkg/gotd/tg"
 )
 
 type dimensionable interface {

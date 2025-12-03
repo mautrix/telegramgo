@@ -1,1 +1,4 @@
 pkg/connector/humanise/errors.go linguist-generated=true
+pkg/gotd/tg/* linguist-generated=true
+tl_*_gen.go linguist-generated=true
+*.gen.go linguist-generated=true

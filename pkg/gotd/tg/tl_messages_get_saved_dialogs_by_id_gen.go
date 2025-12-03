@@ -32,16 +32,28 @@ var (
 )
 
 // MessagesGetSavedDialogsByIDRequest represents TL type `messages.getSavedDialogsByID#6f6f9c96`.
+// Obtain information about specific saved message dialogs »¹ or monoforum topics »².
+//
+// Links:
+//  1. https://core.telegram.org/api/saved-messages#saved-message-dialogs
+//  2. https://core.telegram.org/api/monoforum
 //
 // See https://core.telegram.org/method/messages.getSavedDialogsByID for reference.
 type MessagesGetSavedDialogsByIDRequest struct {
-	// Flags field of MessagesGetSavedDialogsByIDRequest.
+	// Flags, see TL conditional fields¹
+	//
+	// Links:
+	//  1) https://core.telegram.org/mtproto/TL-combinators#conditional-fields
 	Flags bin.Fields
-	// ParentPeer field of MessagesGetSavedDialogsByIDRequest.
+	// If set, fetches monoforum topics »¹, otherwise fetches saved message dialogs »².
+	//
+	// Links:
+	//  1) https://core.telegram.org/api/monoforum
+	//  2) https://core.telegram.org/api/saved-messages#saved-message-dialogs
 	//
 	// Use SetParentPeer and GetParentPeer helpers.
 	ParentPeer InputPeerClass
-	// IDs field of MessagesGetSavedDialogsByIDRequest.
+	// IDs of dialogs (topics) to fetch.
 	IDs []InputPeerClass
 }
 
@@ -255,6 +267,11 @@ func (g *MessagesGetSavedDialogsByIDRequest) MapIDs() (value InputPeerClassArray
 }
 
 // MessagesGetSavedDialogsByID invokes method messages.getSavedDialogsByID#6f6f9c96 returning error if any.
+// Obtain information about specific saved message dialogs »¹ or monoforum topics »².
+//
+// Links:
+//  1. https://core.telegram.org/api/saved-messages#saved-message-dialogs
+//  2. https://core.telegram.org/api/monoforum
 //
 // See https://core.telegram.org/method/messages.getSavedDialogsByID for reference.
 func (c *Client) MessagesGetSavedDialogsByID(ctx context.Context, request *MessagesGetSavedDialogsByIDRequest) (MessagesSavedDialogsClass, error) {

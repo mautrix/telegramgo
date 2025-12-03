@@ -36,11 +36,17 @@ var (
 //
 // See https://core.telegram.org/method/contacts.resolveUsername for reference.
 type ContactsResolveUsernameRequest struct {
-	// Flags field of ContactsResolveUsernameRequest.
+	// Flags, see TL conditional fields¹
+	//
+	// Links:
+	//  1) https://core.telegram.org/mtproto/TL-combinators#conditional-fields
 	Flags bin.Fields
 	// @username to resolve
 	Username string
-	// Referer field of ContactsResolveUsernameRequest.
+	// Referrer ID from referral links »¹.
+	//
+	// Links:
+	//  1) https://core.telegram.org/api/links#referral-links
 	//
 	// Use SetReferer and GetReferer helpers.
 	Referer string
@@ -233,11 +239,11 @@ func (r *ContactsResolveUsernameRequest) GetReferer() (value string, ok bool) {
 // Possible errors:
 //
 //	400 CONNECTION_LAYER_INVALID: Layer invalid.
+//	400 STARREF_EXPIRED: The specified referral link is invalid.
 //	400 USERNAME_INVALID: The provided username is not valid.
 //	400 USERNAME_NOT_OCCUPIED: The provided username is not occupied.
 //
 // See https://core.telegram.org/method/contacts.resolveUsername for reference.
-// Can be used by bots.
 func (c *Client) ContactsResolveUsername(ctx context.Context, request *ContactsResolveUsernameRequest) (*ContactsResolvedPeer, error) {
 	var result ContactsResolvedPeer
 

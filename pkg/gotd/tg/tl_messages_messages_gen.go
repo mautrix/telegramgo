@@ -31,13 +31,15 @@ var (
 	_ = tdjson.Encoder{}
 )
 
-// MessagesMessages represents TL type `messages.messages#8c718e87`.
+// MessagesMessages represents TL type `messages.messages#1d73e7ea`.
 // Full list of messages with auxiliary data.
 //
 // See https://core.telegram.org/constructor/messages.messages for reference.
 type MessagesMessages struct {
 	// List of messages
 	Messages []MessageClass
+	// Topics field of MessagesMessages.
+	Topics []ForumTopicClass
 	// List of chats mentioned in dialogs
 	Chats []ChatClass
 	// List of users mentioned in messages and chats
@@ -45,7 +47,7 @@ type MessagesMessages struct {
 }
 
 // MessagesMessagesTypeID is TL type id of MessagesMessages.
-const MessagesMessagesTypeID = 0x8c718e87
+const MessagesMessagesTypeID = 0x1d73e7ea
 
 // construct implements constructor of MessagesMessagesClass.
 func (m MessagesMessages) construct() MessagesMessagesClass { return &m }
@@ -65,6 +67,9 @@ func (m *MessagesMessages) Zero() bool {
 		return true
 	}
 	if !(m.Messages == nil) {
+		return false
+	}
+	if !(m.Topics == nil) {
 		return false
 	}
 	if !(m.Chats == nil) {
@@ -89,10 +94,12 @@ func (m *MessagesMessages) String() string {
 // FillFrom fills MessagesMessages from given interface.
 func (m *MessagesMessages) FillFrom(from interface {
 	GetMessages() (value []MessageClass)
+	GetTopics() (value []ForumTopicClass)
 	GetChats() (value []ChatClass)
 	GetUsers() (value []UserClass)
 }) {
 	m.Messages = from.GetMessages()
+	m.Topics = from.GetTopics()
 	m.Chats = from.GetChats()
 	m.Users = from.GetUsers()
 }
@@ -125,6 +132,10 @@ func (m *MessagesMessages) TypeInfo() tdp.Type {
 			SchemaName: "messages",
 		},
 		{
+			Name:       "Topics",
+			SchemaName: "topics",
+		},
+		{
 			Name:       "Chats",
 			SchemaName: "chats",
 		},
@@ -139,7 +150,7 @@ func (m *MessagesMessages) TypeInfo() tdp.Type {
 // Encode implements bin.Encoder.
 func (m *MessagesMessages) Encode(b *bin.Buffer) error {
 	if m == nil {
-		return fmt.Errorf("can't encode messages.messages#8c718e87 as nil")
+		return fmt.Errorf("can't encode messages.messages#1d73e7ea as nil")
 	}
 	b.PutID(MessagesMessagesTypeID)
 	return m.EncodeBare(b)
@@ -148,33 +159,42 @@ func (m *MessagesMessages) Encode(b *bin.Buffer) error {
 // EncodeBare implements bin.BareEncoder.
 func (m *MessagesMessages) EncodeBare(b *bin.Buffer) error {
 	if m == nil {
-		return fmt.Errorf("can't encode messages.messages#8c718e87 as nil")
+		return fmt.Errorf("can't encode messages.messages#1d73e7ea as nil")
 	}
 	b.PutVectorHeader(len(m.Messages))
 	for idx, v := range m.Messages {
 		if v == nil {
-			return fmt.Errorf("unable to encode messages.messages#8c718e87: field messages element with index %d is nil", idx)
+			return fmt.Errorf("unable to encode messages.messages#1d73e7ea: field messages element with index %d is nil", idx)
 		}
 		if err := v.Encode(b); err != nil {
-			return fmt.Errorf("unable to encode messages.messages#8c718e87: field messages element with index %d: %w", idx, err)
+			return fmt.Errorf("unable to encode messages.messages#1d73e7ea: field messages element with index %d: %w", idx, err)
+		}
+	}
+	b.PutVectorHeader(len(m.Topics))
+	for idx, v := range m.Topics {
+		if v == nil {
+			return fmt.Errorf("unable to encode messages.messages#1d73e7ea: field topics element with index %d is nil", idx)
+		}
+		if err := v.Encode(b); err != nil {
+			return fmt.Errorf("unable to encode messages.messages#1d73e7ea: field topics element with index %d: %w", idx, err)
 		}
 	}
 	b.PutVectorHeader(len(m.Chats))
 	for idx, v := range m.Chats {
 		if v == nil {
-			return fmt.Errorf("unable to encode messages.messages#8c718e87: field chats element with index %d is nil", idx)
+			return fmt.Errorf("unable to encode messages.messages#1d73e7ea: field chats element with index %d is nil", idx)
 		}
 		if err := v.Encode(b); err != nil {
-			return fmt.Errorf("unable to encode messages.messages#8c718e87: field chats element with index %d: %w", idx, err)
+			return fmt.Errorf("unable to encode messages.messages#1d73e7ea: field chats element with index %d: %w", idx, err)
 		}
 	}
 	b.PutVectorHeader(len(m.Users))
 	for idx, v := range m.Users {
 		if v == nil {
-			return fmt.Errorf("unable to encode messages.messages#8c718e87: field users element with index %d is nil", idx)
+			return fmt.Errorf("unable to encode messages.messages#1d73e7ea: field users element with index %d is nil", idx)
 		}
 		if err := v.Encode(b); err != nil {
-			return fmt.Errorf("unable to encode messages.messages#8c718e87: field users element with index %d: %w", idx, err)
+			return fmt.Errorf("unable to encode messages.messages#1d73e7ea: field users element with index %d: %w", idx, err)
 		}
 	}
 	return nil
@@ -183,10 +203,10 @@ func (m *MessagesMessages) EncodeBare(b *bin.Buffer) error {
 // Decode implements bin.Decoder.
 func (m *MessagesMessages) Decode(b *bin.Buffer) error {
 	if m == nil {
-		return fmt.Errorf("can't decode messages.messages#8c718e87 to nil")
+		return fmt.Errorf("can't decode messages.messages#1d73e7ea to nil")
 	}
 	if err := b.ConsumeID(MessagesMessagesTypeID); err != nil {
-		return fmt.Errorf("unable to decode messages.messages#8c718e87: %w", err)
+		return fmt.Errorf("unable to decode messages.messages#1d73e7ea: %w", err)
 	}
 	return m.DecodeBare(b)
 }
@@ -194,12 +214,12 @@ func (m *MessagesMessages) Decode(b *bin.Buffer) error {
 // DecodeBare implements bin.BareDecoder.
 func (m *MessagesMessages) DecodeBare(b *bin.Buffer) error {
 	if m == nil {
-		return fmt.Errorf("can't decode messages.messages#8c718e87 to nil")
+		return fmt.Errorf("can't decode messages.messages#1d73e7ea to nil")
 	}
 	{
 		headerLen, err := b.VectorHeader()
 		if err != nil {
-			return fmt.Errorf("unable to decode messages.messages#8c718e87: field messages: %w", err)
+			return fmt.Errorf("unable to decode messages.messages#1d73e7ea: field messages: %w", err)
 		}
 
 		if headerLen > 0 {
@@ -208,7 +228,7 @@ func (m *MessagesMessages) DecodeBare(b *bin.Buffer) error {
 		for idx := 0; idx < headerLen; idx++ {
 			value, err := DecodeMessage(b)
 			if err != nil {
-				return fmt.Errorf("unable to decode messages.messages#8c718e87: field messages: %w", err)
+				return fmt.Errorf("unable to decode messages.messages#1d73e7ea: field messages: %w", err)
 			}
 			m.Messages = append(m.Messages, value)
 		}
@@ -216,7 +236,24 @@ func (m *MessagesMessages) DecodeBare(b *bin.Buffer) error {
 	{
 		headerLen, err := b.VectorHeader()
 		if err != nil {
-			return fmt.Errorf("unable to decode messages.messages#8c718e87: field chats: %w", err)
+			return fmt.Errorf("unable to decode messages.messages#1d73e7ea: field topics: %w", err)
+		}
+
+		if headerLen > 0 {
+			m.Topics = make([]ForumTopicClass, 0, headerLen%bin.PreallocateLimit)
+		}
+		for idx := 0; idx < headerLen; idx++ {
+			value, err := DecodeForumTopic(b)
+			if err != nil {
+				return fmt.Errorf("unable to decode messages.messages#1d73e7ea: field topics: %w", err)
+			}
+			m.Topics = append(m.Topics, value)
+		}
+	}
+	{
+		headerLen, err := b.VectorHeader()
+		if err != nil {
+			return fmt.Errorf("unable to decode messages.messages#1d73e7ea: field chats: %w", err)
 		}
 
 		if headerLen > 0 {
@@ -225,7 +262,7 @@ func (m *MessagesMessages) DecodeBare(b *bin.Buffer) error {
 		for idx := 0; idx < headerLen; idx++ {
 			value, err := DecodeChat(b)
 			if err != nil {
-				return fmt.Errorf("unable to decode messages.messages#8c718e87: field chats: %w", err)
+				return fmt.Errorf("unable to decode messages.messages#1d73e7ea: field chats: %w", err)
 			}
 			m.Chats = append(m.Chats, value)
 		}
@@ -233,7 +270,7 @@ func (m *MessagesMessages) DecodeBare(b *bin.Buffer) error {
 	{
 		headerLen, err := b.VectorHeader()
 		if err != nil {
-			return fmt.Errorf("unable to decode messages.messages#8c718e87: field users: %w", err)
+			return fmt.Errorf("unable to decode messages.messages#1d73e7ea: field users: %w", err)
 		}
 
 		if headerLen > 0 {
@@ -242,7 +279,7 @@ func (m *MessagesMessages) DecodeBare(b *bin.Buffer) error {
 		for idx := 0; idx < headerLen; idx++ {
 			value, err := DecodeUser(b)
 			if err != nil {
-				return fmt.Errorf("unable to decode messages.messages#8c718e87: field users: %w", err)
+				return fmt.Errorf("unable to decode messages.messages#1d73e7ea: field users: %w", err)
 			}
 			m.Users = append(m.Users, value)
 		}
@@ -256,6 +293,14 @@ func (m *MessagesMessages) GetMessages() (value []MessageClass) {
 		return
 	}
 	return m.Messages
+}
+
+// GetTopics returns value of Topics field.
+func (m *MessagesMessages) GetTopics() (value []ForumTopicClass) {
+	if m == nil {
+		return
+	}
+	return m.Topics
 }
 
 // GetChats returns value of Chats field.
@@ -279,6 +324,11 @@ func (m *MessagesMessages) MapMessages() (value MessageClassArray) {
 	return MessageClassArray(m.Messages)
 }
 
+// MapTopics returns field Topics wrapped in ForumTopicClassArray helper.
+func (m *MessagesMessages) MapTopics() (value ForumTopicClassArray) {
+	return ForumTopicClassArray(m.Topics)
+}
+
 // MapChats returns field Chats wrapped in ChatClassArray helper.
 func (m *MessagesMessages) MapChats() (value ChatClassArray) {
 	return ChatClassArray(m.Chats)
@@ -289,7 +339,7 @@ func (m *MessagesMessages) MapUsers() (value UserClassArray) {
 	return UserClassArray(m.Users)
 }
 
-// MessagesMessagesSlice represents TL type `messages.messagesSlice#3a54685e`.
+// MessagesMessagesSlice represents TL type `messages.messagesSlice#5f206716`.
 // Incomplete list of messages and auxiliary data.
 //
 // See https://core.telegram.org/constructor/messages.messagesSlice for reference.
@@ -313,12 +363,23 @@ type MessagesMessagesSlice struct {
 	// Indicates the absolute position of messages[0] within the total result set with count
 	// count. This is useful, for example, if the result was fetched using offset_id, and we
 	// need to display a progress/total counter (like photo 134 of 200, for all media in a
-	// chat, we could simply use photo ${offset_id_offset} of ${count}.
+	// chat, we could simply use photo ${offset_id_offset} of ${count}).
 	//
 	// Use SetOffsetIDOffset and GetOffsetIDOffset helpers.
 	OffsetIDOffset int
+	// For global post searches »¹, the remaining amount of free searches, here
+	// query_is_free is related to the current call only, not to the next paginated call, and
+	// all subsequent pagination calls will always be free.
+	//
+	// Links:
+	//  1) https://core.telegram.org/api/search#posts-tab
+	//
+	// Use SetSearchFlood and GetSearchFlood helpers.
+	SearchFlood SearchPostsFlood
 	// List of messages
 	Messages []MessageClass
+	// Topics field of MessagesMessagesSlice.
+	Topics []ForumTopicClass
 	// List of chats mentioned in messages
 	Chats []ChatClass
 	// List of users mentioned in messages and chats
@@ -326,7 +387,7 @@ type MessagesMessagesSlice struct {
 }
 
 // MessagesMessagesSliceTypeID is TL type id of MessagesMessagesSlice.
-const MessagesMessagesSliceTypeID = 0x3a54685e
+const MessagesMessagesSliceTypeID = 0x5f206716
 
 // construct implements constructor of MessagesMessagesClass.
 func (m MessagesMessagesSlice) construct() MessagesMessagesClass { return &m }
@@ -360,7 +421,13 @@ func (m *MessagesMessagesSlice) Zero() bool {
 	if !(m.OffsetIDOffset == 0) {
 		return false
 	}
+	if !(m.SearchFlood.Zero()) {
+		return false
+	}
 	if !(m.Messages == nil) {
+		return false
+	}
+	if !(m.Topics == nil) {
 		return false
 	}
 	if !(m.Chats == nil) {
@@ -388,7 +455,9 @@ func (m *MessagesMessagesSlice) FillFrom(from interface {
 	GetCount() (value int)
 	GetNextRate() (value int, ok bool)
 	GetOffsetIDOffset() (value int, ok bool)
+	GetSearchFlood() (value SearchPostsFlood, ok bool)
 	GetMessages() (value []MessageClass)
+	GetTopics() (value []ForumTopicClass)
 	GetChats() (value []ChatClass)
 	GetUsers() (value []UserClass)
 }) {
@@ -402,7 +471,12 @@ func (m *MessagesMessagesSlice) FillFrom(from interface {
 		m.OffsetIDOffset = val
 	}
 
+	if val, ok := from.GetSearchFlood(); ok {
+		m.SearchFlood = val
+	}
+
 	m.Messages = from.GetMessages()
+	m.Topics = from.GetTopics()
 	m.Chats = from.GetChats()
 	m.Users = from.GetUsers()
 }
@@ -450,8 +524,17 @@ func (m *MessagesMessagesSlice) TypeInfo() tdp.Type {
 			Null:       !m.Flags.Has(2),
 		},
 		{
+			Name:       "SearchFlood",
+			SchemaName: "search_flood",
+			Null:       !m.Flags.Has(3),
+		},
+		{
 			Name:       "Messages",
 			SchemaName: "messages",
+		},
+		{
+			Name:       "Topics",
+			SchemaName: "topics",
 		},
 		{
 			Name:       "Chats",
@@ -476,12 +559,15 @@ func (m *MessagesMessagesSlice) SetFlags() {
 	if !(m.OffsetIDOffset == 0) {
 		m.Flags.Set(2)
 	}
+	if !(m.SearchFlood.Zero()) {
+		m.Flags.Set(3)
+	}
 }
 
 // Encode implements bin.Encoder.
 func (m *MessagesMessagesSlice) Encode(b *bin.Buffer) error {
 	if m == nil {
-		return fmt.Errorf("can't encode messages.messagesSlice#3a54685e as nil")
+		return fmt.Errorf("can't encode messages.messagesSlice#5f206716 as nil")
 	}
 	b.PutID(MessagesMessagesSliceTypeID)
 	return m.EncodeBare(b)
@@ -490,11 +576,11 @@ func (m *MessagesMessagesSlice) Encode(b *bin.Buffer) error {
 // EncodeBare implements bin.BareEncoder.
 func (m *MessagesMessagesSlice) EncodeBare(b *bin.Buffer) error {
 	if m == nil {
-		return fmt.Errorf("can't encode messages.messagesSlice#3a54685e as nil")
+		return fmt.Errorf("can't encode messages.messagesSlice#5f206716 as nil")
 	}
 	m.SetFlags()
 	if err := m.Flags.Encode(b); err != nil {
-		return fmt.Errorf("unable to encode messages.messagesSlice#3a54685e: field flags: %w", err)
+		return fmt.Errorf("unable to encode messages.messagesSlice#5f206716: field flags: %w", err)
 	}
 	b.PutInt(m.Count)
 	if m.Flags.Has(0) {
@@ -503,31 +589,45 @@ func (m *MessagesMessagesSlice) EncodeBare(b *bin.Buffer) error {
 	if m.Flags.Has(2) {
 		b.PutInt(m.OffsetIDOffset)
 	}
+	if m.Flags.Has(3) {
+		if err := m.SearchFlood.Encode(b); err != nil {
+			return fmt.Errorf("unable to encode messages.messagesSlice#5f206716: field search_flood: %w", err)
+		}
+	}
 	b.PutVectorHeader(len(m.Messages))
 	for idx, v := range m.Messages {
 		if v == nil {
-			return fmt.Errorf("unable to encode messages.messagesSlice#3a54685e: field messages element with index %d is nil", idx)
+			return fmt.Errorf("unable to encode messages.messagesSlice#5f206716: field messages element with index %d is nil", idx)
 		}
 		if err := v.Encode(b); err != nil {
-			return fmt.Errorf("unable to encode messages.messagesSlice#3a54685e: field messages element with index %d: %w", idx, err)
+			return fmt.Errorf("unable to encode messages.messagesSlice#5f206716: field messages element with index %d: %w", idx, err)
+		}
+	}
+	b.PutVectorHeader(len(m.Topics))
+	for idx, v := range m.Topics {
+		if v == nil {
+			return fmt.Errorf("unable to encode messages.messagesSlice#5f206716: field topics element with index %d is nil", idx)
+		}
+		if err := v.Encode(b); err != nil {
+			return fmt.Errorf("unable to encode messages.messagesSlice#5f206716: field topics element with index %d: %w", idx, err)
 		}
 	}
 	b.PutVectorHeader(len(m.Chats))
 	for idx, v := range m.Chats {
 		if v == nil {
-			return fmt.Errorf("unable to encode messages.messagesSlice#3a54685e: field chats element with index %d is nil", idx)
+			return fmt.Errorf("unable to encode messages.messagesSlice#5f206716: field chats element with index %d is nil", idx)
 		}
 		if err := v.Encode(b); err != nil {
-			return fmt.Errorf("unable to encode messages.messagesSlice#3a54685e: field chats element with index %d: %w", idx, err)
+			return fmt.Errorf("unable to encode messages.messagesSlice#5f206716: field chats element with index %d: %w", idx, err)
 		}
 	}
 	b.PutVectorHeader(len(m.Users))
 	for idx, v := range m.Users {
 		if v == nil {
-			return fmt.Errorf("unable to encode messages.messagesSlice#3a54685e: field users element with index %d is nil", idx)
+			return fmt.Errorf("unable to encode messages.messagesSlice#5f206716: field users element with index %d is nil", idx)
 		}
 		if err := v.Encode(b); err != nil {
-			return fmt.Errorf("unable to encode messages.messagesSlice#3a54685e: field users element with index %d: %w", idx, err)
+			return fmt.Errorf("unable to encode messages.messagesSlice#5f206716: field users element with index %d: %w", idx, err)
 		}
 	}
 	return nil
@@ -536,10 +636,10 @@ func (m *MessagesMessagesSlice) EncodeBare(b *bin.Buffer) error {
 // Decode implements bin.Decoder.
 func (m *MessagesMessagesSlice) Decode(b *bin.Buffer) error {
 	if m == nil {
-		return fmt.Errorf("can't decode messages.messagesSlice#3a54685e to nil")
+		return fmt.Errorf("can't decode messages.messagesSlice#5f206716 to nil")
 	}
 	if err := b.ConsumeID(MessagesMessagesSliceTypeID); err != nil {
-		return fmt.Errorf("unable to decode messages.messagesSlice#3a54685e: %w", err)
+		return fmt.Errorf("unable to decode messages.messagesSlice#5f206716: %w", err)
 	}
 	return m.DecodeBare(b)
 }
@@ -547,39 +647,44 @@ func (m *MessagesMessagesSlice) Decode(b *bin.Buffer) error {
 // DecodeBare implements bin.BareDecoder.
 func (m *MessagesMessagesSlice) DecodeBare(b *bin.Buffer) error {
 	if m == nil {
-		return fmt.Errorf("can't decode messages.messagesSlice#3a54685e to nil")
+		return fmt.Errorf("can't decode messages.messagesSlice#5f206716 to nil")
 	}
 	{
 		if err := m.Flags.Decode(b); err != nil {
-			return fmt.Errorf("unable to decode messages.messagesSlice#3a54685e: field flags: %w", err)
+			return fmt.Errorf("unable to decode messages.messagesSlice#5f206716: field flags: %w", err)
 		}
 	}
 	m.Inexact = m.Flags.Has(1)
 	{
 		value, err := b.Int()
 		if err != nil {
-			return fmt.Errorf("unable to decode messages.messagesSlice#3a54685e: field count: %w", err)
+			return fmt.Errorf("unable to decode messages.messagesSlice#5f206716: field count: %w", err)
 		}
 		m.Count = value
 	}
 	if m.Flags.Has(0) {
 		value, err := b.Int()
 		if err != nil {
-			return fmt.Errorf("unable to decode messages.messagesSlice#3a54685e: field next_rate: %w", err)
+			return fmt.Errorf("unable to decode messages.messagesSlice#5f206716: field next_rate: %w", err)
 		}
 		m.NextRate = value
 	}
 	if m.Flags.Has(2) {
 		value, err := b.Int()
 		if err != nil {
-			return fmt.Errorf("unable to decode messages.messagesSlice#3a54685e: field offset_id_offset: %w", err)
+			return fmt.Errorf("unable to decode messages.messagesSlice#5f206716: field offset_id_offset: %w", err)
 		}
 		m.OffsetIDOffset = value
+	}
+	if m.Flags.Has(3) {
+		if err := m.SearchFlood.Decode(b); err != nil {
+			return fmt.Errorf("unable to decode messages.messagesSlice#5f206716: field search_flood: %w", err)
+		}
 	}
 	{
 		headerLen, err := b.VectorHeader()
 		if err != nil {
-			return fmt.Errorf("unable to decode messages.messagesSlice#3a54685e: field messages: %w", err)
+			return fmt.Errorf("unable to decode messages.messagesSlice#5f206716: field messages: %w", err)
 		}
 
 		if headerLen > 0 {
@@ -588,7 +693,7 @@ func (m *MessagesMessagesSlice) DecodeBare(b *bin.Buffer) error {
 		for idx := 0; idx < headerLen; idx++ {
 			value, err := DecodeMessage(b)
 			if err != nil {
-				return fmt.Errorf("unable to decode messages.messagesSlice#3a54685e: field messages: %w", err)
+				return fmt.Errorf("unable to decode messages.messagesSlice#5f206716: field messages: %w", err)
 			}
 			m.Messages = append(m.Messages, value)
 		}
@@ -596,7 +701,24 @@ func (m *MessagesMessagesSlice) DecodeBare(b *bin.Buffer) error {
 	{
 		headerLen, err := b.VectorHeader()
 		if err != nil {
-			return fmt.Errorf("unable to decode messages.messagesSlice#3a54685e: field chats: %w", err)
+			return fmt.Errorf("unable to decode messages.messagesSlice#5f206716: field topics: %w", err)
+		}
+
+		if headerLen > 0 {
+			m.Topics = make([]ForumTopicClass, 0, headerLen%bin.PreallocateLimit)
+		}
+		for idx := 0; idx < headerLen; idx++ {
+			value, err := DecodeForumTopic(b)
+			if err != nil {
+				return fmt.Errorf("unable to decode messages.messagesSlice#5f206716: field topics: %w", err)
+			}
+			m.Topics = append(m.Topics, value)
+		}
+	}
+	{
+		headerLen, err := b.VectorHeader()
+		if err != nil {
+			return fmt.Errorf("unable to decode messages.messagesSlice#5f206716: field chats: %w", err)
 		}
 
 		if headerLen > 0 {
@@ -605,7 +727,7 @@ func (m *MessagesMessagesSlice) DecodeBare(b *bin.Buffer) error {
 		for idx := 0; idx < headerLen; idx++ {
 			value, err := DecodeChat(b)
 			if err != nil {
-				return fmt.Errorf("unable to decode messages.messagesSlice#3a54685e: field chats: %w", err)
+				return fmt.Errorf("unable to decode messages.messagesSlice#5f206716: field chats: %w", err)
 			}
 			m.Chats = append(m.Chats, value)
 		}
@@ -613,7 +735,7 @@ func (m *MessagesMessagesSlice) DecodeBare(b *bin.Buffer) error {
 	{
 		headerLen, err := b.VectorHeader()
 		if err != nil {
-			return fmt.Errorf("unable to decode messages.messagesSlice#3a54685e: field users: %w", err)
+			return fmt.Errorf("unable to decode messages.messagesSlice#5f206716: field users: %w", err)
 		}
 
 		if headerLen > 0 {
@@ -622,7 +744,7 @@ func (m *MessagesMessagesSlice) DecodeBare(b *bin.Buffer) error {
 		for idx := 0; idx < headerLen; idx++ {
 			value, err := DecodeUser(b)
 			if err != nil {
-				return fmt.Errorf("unable to decode messages.messagesSlice#3a54685e: field users: %w", err)
+				return fmt.Errorf("unable to decode messages.messagesSlice#5f206716: field users: %w", err)
 			}
 			m.Users = append(m.Users, value)
 		}
@@ -693,12 +815,38 @@ func (m *MessagesMessagesSlice) GetOffsetIDOffset() (value int, ok bool) {
 	return m.OffsetIDOffset, true
 }
 
+// SetSearchFlood sets value of SearchFlood conditional field.
+func (m *MessagesMessagesSlice) SetSearchFlood(value SearchPostsFlood) {
+	m.Flags.Set(3)
+	m.SearchFlood = value
+}
+
+// GetSearchFlood returns value of SearchFlood conditional field and
+// boolean which is true if field was set.
+func (m *MessagesMessagesSlice) GetSearchFlood() (value SearchPostsFlood, ok bool) {
+	if m == nil {
+		return
+	}
+	if !m.Flags.Has(3) {
+		return value, false
+	}
+	return m.SearchFlood, true
+}
+
 // GetMessages returns value of Messages field.
 func (m *MessagesMessagesSlice) GetMessages() (value []MessageClass) {
 	if m == nil {
 		return
 	}
 	return m.Messages
+}
+
+// GetTopics returns value of Topics field.
+func (m *MessagesMessagesSlice) GetTopics() (value []ForumTopicClass) {
+	if m == nil {
+		return
+	}
+	return m.Topics
 }
 
 // GetChats returns value of Chats field.
@@ -720,6 +868,11 @@ func (m *MessagesMessagesSlice) GetUsers() (value []UserClass) {
 // MapMessages returns field Messages wrapped in MessageClassArray helper.
 func (m *MessagesMessagesSlice) MapMessages() (value MessageClassArray) {
 	return MessageClassArray(m.Messages)
+}
+
+// MapTopics returns field Topics wrapped in ForumTopicClassArray helper.
+func (m *MessagesMessagesSlice) MapTopics() (value ForumTopicClassArray) {
+	return ForumTopicClassArray(m.Topics)
 }
 
 // MapChats returns field Chats wrapped in ChatClassArray helper.
@@ -1356,8 +1509,8 @@ const MessagesMessagesClassName = "messages.Messages"
 //	    panic(err)
 //	}
 //	switch v := g.(type) {
-//	case *tg.MessagesMessages: // messages.messages#8c718e87
-//	case *tg.MessagesMessagesSlice: // messages.messagesSlice#3a54685e
+//	case *tg.MessagesMessages: // messages.messages#1d73e7ea
+//	case *tg.MessagesMessagesSlice: // messages.messagesSlice#5f206716
 //	case *tg.MessagesChannelMessages: // messages.channelMessages#c776ba4e
 //	case *tg.MessagesMessagesNotModified: // messages.messagesNotModified#74535f21
 //	default: panic(v)
@@ -1406,6 +1559,9 @@ type ModifiedMessagesMessages interface {
 	// List of messages
 	GetMessages() (value []MessageClass)
 
+	// Topics field of MessagesMessages.
+	GetTopics() (value []ForumTopicClass)
+
 	// List of chats mentioned in dialogs
 	GetChats() (value []ChatClass)
 
@@ -1445,14 +1601,14 @@ func DecodeMessagesMessages(buf *bin.Buffer) (MessagesMessagesClass, error) {
 	}
 	switch id {
 	case MessagesMessagesTypeID:
-		// Decoding messages.messages#8c718e87.
+		// Decoding messages.messages#1d73e7ea.
 		v := MessagesMessages{}
 		if err := v.Decode(buf); err != nil {
 			return nil, fmt.Errorf("unable to decode MessagesMessagesClass: %w", err)
 		}
 		return &v, nil
 	case MessagesMessagesSliceTypeID:
-		// Decoding messages.messagesSlice#3a54685e.
+		// Decoding messages.messagesSlice#5f206716.
 		v := MessagesMessagesSlice{}
 		if err := v.Decode(buf); err != nil {
 			return nil, fmt.Errorf("unable to decode MessagesMessagesClass: %w", err)

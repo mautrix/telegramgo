@@ -792,10 +792,21 @@ func (w *WebPageAttributeStickerSet) MapStickers() (value DocumentClassArray) {
 }
 
 // WebPageAttributeUniqueStarGift represents TL type `webPageAttributeUniqueStarGift#cf6f6db8`.
+// Contains info about collectible gift »¹ for a webPage² preview of a collectible
+// gift »³ (the webPage⁴ will have a type of telegram_nft).
+//
+// Links:
+//  1. https://core.telegram.org/api/gifts#collectible-gifts
+//  2. https://core.telegram.org/constructor/webPage
+//  3. https://core.telegram.org/api/gifts#collectible-gifts
+//  4. https://core.telegram.org/constructor/webPage
 //
 // See https://core.telegram.org/constructor/webPageAttributeUniqueStarGift for reference.
 type WebPageAttributeUniqueStarGift struct {
-	// Gift field of WebPageAttributeUniqueStarGift.
+	// The starGiftUnique¹ constructor.
+	//
+	// Links:
+	//  1) https://core.telegram.org/constructor/starGiftUnique
 	Gift StarGiftClass
 }
 
@@ -930,6 +941,418 @@ func (w *WebPageAttributeUniqueStarGift) GetGift() (value StarGiftClass) {
 	return w.Gift
 }
 
+// WebPageAttributeStarGiftCollection represents TL type `webPageAttributeStarGiftCollection#31cad303`.
+// Contains info about a gift collection »¹ for a webPage² preview of a gift
+// collection »³ (the webPage⁴ will have a type of telegram_collection).
+//
+// Links:
+//  1. https://core.telegram.org/api/gifts#gift-collections
+//  2. https://core.telegram.org/constructor/webPage
+//  3. https://core.telegram.org/api/gifts#gift-collections
+//  4. https://core.telegram.org/constructor/webPage
+//
+// See https://core.telegram.org/constructor/webPageAttributeStarGiftCollection for reference.
+type WebPageAttributeStarGiftCollection struct {
+	// Gifts in the collection.
+	Icons []DocumentClass
+}
+
+// WebPageAttributeStarGiftCollectionTypeID is TL type id of WebPageAttributeStarGiftCollection.
+const WebPageAttributeStarGiftCollectionTypeID = 0x31cad303
+
+// construct implements constructor of WebPageAttributeClass.
+func (w WebPageAttributeStarGiftCollection) construct() WebPageAttributeClass { return &w }
+
+// Ensuring interfaces in compile-time for WebPageAttributeStarGiftCollection.
+var (
+	_ bin.Encoder     = &WebPageAttributeStarGiftCollection{}
+	_ bin.Decoder     = &WebPageAttributeStarGiftCollection{}
+	_ bin.BareEncoder = &WebPageAttributeStarGiftCollection{}
+	_ bin.BareDecoder = &WebPageAttributeStarGiftCollection{}
+
+	_ WebPageAttributeClass = &WebPageAttributeStarGiftCollection{}
+)
+
+func (w *WebPageAttributeStarGiftCollection) Zero() bool {
+	if w == nil {
+		return true
+	}
+	if !(w.Icons == nil) {
+		return false
+	}
+
+	return true
+}
+
+// String implements fmt.Stringer.
+func (w *WebPageAttributeStarGiftCollection) String() string {
+	if w == nil {
+		return "WebPageAttributeStarGiftCollection(nil)"
+	}
+	type Alias WebPageAttributeStarGiftCollection
+	return fmt.Sprintf("WebPageAttributeStarGiftCollection%+v", Alias(*w))
+}
+
+// FillFrom fills WebPageAttributeStarGiftCollection from given interface.
+func (w *WebPageAttributeStarGiftCollection) FillFrom(from interface {
+	GetIcons() (value []DocumentClass)
+}) {
+	w.Icons = from.GetIcons()
+}
+
+// TypeID returns type id in TL schema.
+//
+// See https://core.telegram.org/mtproto/TL-tl#remarks.
+func (*WebPageAttributeStarGiftCollection) TypeID() uint32 {
+	return WebPageAttributeStarGiftCollectionTypeID
+}
+
+// TypeName returns name of type in TL schema.
+func (*WebPageAttributeStarGiftCollection) TypeName() string {
+	return "webPageAttributeStarGiftCollection"
+}
+
+// TypeInfo returns info about TL type.
+func (w *WebPageAttributeStarGiftCollection) TypeInfo() tdp.Type {
+	typ := tdp.Type{
+		Name: "webPageAttributeStarGiftCollection",
+		ID:   WebPageAttributeStarGiftCollectionTypeID,
+	}
+	if w == nil {
+		typ.Null = true
+		return typ
+	}
+	typ.Fields = []tdp.Field{
+		{
+			Name:       "Icons",
+			SchemaName: "icons",
+		},
+	}
+	return typ
+}
+
+// Encode implements bin.Encoder.
+func (w *WebPageAttributeStarGiftCollection) Encode(b *bin.Buffer) error {
+	if w == nil {
+		return fmt.Errorf("can't encode webPageAttributeStarGiftCollection#31cad303 as nil")
+	}
+	b.PutID(WebPageAttributeStarGiftCollectionTypeID)
+	return w.EncodeBare(b)
+}
+
+// EncodeBare implements bin.BareEncoder.
+func (w *WebPageAttributeStarGiftCollection) EncodeBare(b *bin.Buffer) error {
+	if w == nil {
+		return fmt.Errorf("can't encode webPageAttributeStarGiftCollection#31cad303 as nil")
+	}
+	b.PutVectorHeader(len(w.Icons))
+	for idx, v := range w.Icons {
+		if v == nil {
+			return fmt.Errorf("unable to encode webPageAttributeStarGiftCollection#31cad303: field icons element with index %d is nil", idx)
+		}
+		if err := v.Encode(b); err != nil {
+			return fmt.Errorf("unable to encode webPageAttributeStarGiftCollection#31cad303: field icons element with index %d: %w", idx, err)
+		}
+	}
+	return nil
+}
+
+// Decode implements bin.Decoder.
+func (w *WebPageAttributeStarGiftCollection) Decode(b *bin.Buffer) error {
+	if w == nil {
+		return fmt.Errorf("can't decode webPageAttributeStarGiftCollection#31cad303 to nil")
+	}
+	if err := b.ConsumeID(WebPageAttributeStarGiftCollectionTypeID); err != nil {
+		return fmt.Errorf("unable to decode webPageAttributeStarGiftCollection#31cad303: %w", err)
+	}
+	return w.DecodeBare(b)
+}
+
+// DecodeBare implements bin.BareDecoder.
+func (w *WebPageAttributeStarGiftCollection) DecodeBare(b *bin.Buffer) error {
+	if w == nil {
+		return fmt.Errorf("can't decode webPageAttributeStarGiftCollection#31cad303 to nil")
+	}
+	{
+		headerLen, err := b.VectorHeader()
+		if err != nil {
+			return fmt.Errorf("unable to decode webPageAttributeStarGiftCollection#31cad303: field icons: %w", err)
+		}
+
+		if headerLen > 0 {
+			w.Icons = make([]DocumentClass, 0, headerLen%bin.PreallocateLimit)
+		}
+		for idx := 0; idx < headerLen; idx++ {
+			value, err := DecodeDocument(b)
+			if err != nil {
+				return fmt.Errorf("unable to decode webPageAttributeStarGiftCollection#31cad303: field icons: %w", err)
+			}
+			w.Icons = append(w.Icons, value)
+		}
+	}
+	return nil
+}
+
+// GetIcons returns value of Icons field.
+func (w *WebPageAttributeStarGiftCollection) GetIcons() (value []DocumentClass) {
+	if w == nil {
+		return
+	}
+	return w.Icons
+}
+
+// MapIcons returns field Icons wrapped in DocumentClassArray helper.
+func (w *WebPageAttributeStarGiftCollection) MapIcons() (value DocumentClassArray) {
+	return DocumentClassArray(w.Icons)
+}
+
+// WebPageAttributeStarGiftAuction represents TL type `webPageAttributeStarGiftAuction#34986ab`.
+//
+// See https://core.telegram.org/constructor/webPageAttributeStarGiftAuction for reference.
+type WebPageAttributeStarGiftAuction struct {
+	// Gift field of WebPageAttributeStarGiftAuction.
+	Gift StarGiftClass
+	// EndDate field of WebPageAttributeStarGiftAuction.
+	EndDate int
+	// CenterColor field of WebPageAttributeStarGiftAuction.
+	CenterColor int
+	// EdgeColor field of WebPageAttributeStarGiftAuction.
+	EdgeColor int
+	// TextColor field of WebPageAttributeStarGiftAuction.
+	TextColor int
+}
+
+// WebPageAttributeStarGiftAuctionTypeID is TL type id of WebPageAttributeStarGiftAuction.
+const WebPageAttributeStarGiftAuctionTypeID = 0x34986ab
+
+// construct implements constructor of WebPageAttributeClass.
+func (w WebPageAttributeStarGiftAuction) construct() WebPageAttributeClass { return &w }
+
+// Ensuring interfaces in compile-time for WebPageAttributeStarGiftAuction.
+var (
+	_ bin.Encoder     = &WebPageAttributeStarGiftAuction{}
+	_ bin.Decoder     = &WebPageAttributeStarGiftAuction{}
+	_ bin.BareEncoder = &WebPageAttributeStarGiftAuction{}
+	_ bin.BareDecoder = &WebPageAttributeStarGiftAuction{}
+
+	_ WebPageAttributeClass = &WebPageAttributeStarGiftAuction{}
+)
+
+func (w *WebPageAttributeStarGiftAuction) Zero() bool {
+	if w == nil {
+		return true
+	}
+	if !(w.Gift == nil) {
+		return false
+	}
+	if !(w.EndDate == 0) {
+		return false
+	}
+	if !(w.CenterColor == 0) {
+		return false
+	}
+	if !(w.EdgeColor == 0) {
+		return false
+	}
+	if !(w.TextColor == 0) {
+		return false
+	}
+
+	return true
+}
+
+// String implements fmt.Stringer.
+func (w *WebPageAttributeStarGiftAuction) String() string {
+	if w == nil {
+		return "WebPageAttributeStarGiftAuction(nil)"
+	}
+	type Alias WebPageAttributeStarGiftAuction
+	return fmt.Sprintf("WebPageAttributeStarGiftAuction%+v", Alias(*w))
+}
+
+// FillFrom fills WebPageAttributeStarGiftAuction from given interface.
+func (w *WebPageAttributeStarGiftAuction) FillFrom(from interface {
+	GetGift() (value StarGiftClass)
+	GetEndDate() (value int)
+	GetCenterColor() (value int)
+	GetEdgeColor() (value int)
+	GetTextColor() (value int)
+}) {
+	w.Gift = from.GetGift()
+	w.EndDate = from.GetEndDate()
+	w.CenterColor = from.GetCenterColor()
+	w.EdgeColor = from.GetEdgeColor()
+	w.TextColor = from.GetTextColor()
+}
+
+// TypeID returns type id in TL schema.
+//
+// See https://core.telegram.org/mtproto/TL-tl#remarks.
+func (*WebPageAttributeStarGiftAuction) TypeID() uint32 {
+	return WebPageAttributeStarGiftAuctionTypeID
+}
+
+// TypeName returns name of type in TL schema.
+func (*WebPageAttributeStarGiftAuction) TypeName() string {
+	return "webPageAttributeStarGiftAuction"
+}
+
+// TypeInfo returns info about TL type.
+func (w *WebPageAttributeStarGiftAuction) TypeInfo() tdp.Type {
+	typ := tdp.Type{
+		Name: "webPageAttributeStarGiftAuction",
+		ID:   WebPageAttributeStarGiftAuctionTypeID,
+	}
+	if w == nil {
+		typ.Null = true
+		return typ
+	}
+	typ.Fields = []tdp.Field{
+		{
+			Name:       "Gift",
+			SchemaName: "gift",
+		},
+		{
+			Name:       "EndDate",
+			SchemaName: "end_date",
+		},
+		{
+			Name:       "CenterColor",
+			SchemaName: "center_color",
+		},
+		{
+			Name:       "EdgeColor",
+			SchemaName: "edge_color",
+		},
+		{
+			Name:       "TextColor",
+			SchemaName: "text_color",
+		},
+	}
+	return typ
+}
+
+// Encode implements bin.Encoder.
+func (w *WebPageAttributeStarGiftAuction) Encode(b *bin.Buffer) error {
+	if w == nil {
+		return fmt.Errorf("can't encode webPageAttributeStarGiftAuction#34986ab as nil")
+	}
+	b.PutID(WebPageAttributeStarGiftAuctionTypeID)
+	return w.EncodeBare(b)
+}
+
+// EncodeBare implements bin.BareEncoder.
+func (w *WebPageAttributeStarGiftAuction) EncodeBare(b *bin.Buffer) error {
+	if w == nil {
+		return fmt.Errorf("can't encode webPageAttributeStarGiftAuction#34986ab as nil")
+	}
+	if w.Gift == nil {
+		return fmt.Errorf("unable to encode webPageAttributeStarGiftAuction#34986ab: field gift is nil")
+	}
+	if err := w.Gift.Encode(b); err != nil {
+		return fmt.Errorf("unable to encode webPageAttributeStarGiftAuction#34986ab: field gift: %w", err)
+	}
+	b.PutInt(w.EndDate)
+	b.PutInt(w.CenterColor)
+	b.PutInt(w.EdgeColor)
+	b.PutInt(w.TextColor)
+	return nil
+}
+
+// Decode implements bin.Decoder.
+func (w *WebPageAttributeStarGiftAuction) Decode(b *bin.Buffer) error {
+	if w == nil {
+		return fmt.Errorf("can't decode webPageAttributeStarGiftAuction#34986ab to nil")
+	}
+	if err := b.ConsumeID(WebPageAttributeStarGiftAuctionTypeID); err != nil {
+		return fmt.Errorf("unable to decode webPageAttributeStarGiftAuction#34986ab: %w", err)
+	}
+	return w.DecodeBare(b)
+}
+
+// DecodeBare implements bin.BareDecoder.
+func (w *WebPageAttributeStarGiftAuction) DecodeBare(b *bin.Buffer) error {
+	if w == nil {
+		return fmt.Errorf("can't decode webPageAttributeStarGiftAuction#34986ab to nil")
+	}
+	{
+		value, err := DecodeStarGift(b)
+		if err != nil {
+			return fmt.Errorf("unable to decode webPageAttributeStarGiftAuction#34986ab: field gift: %w", err)
+		}
+		w.Gift = value
+	}
+	{
+		value, err := b.Int()
+		if err != nil {
+			return fmt.Errorf("unable to decode webPageAttributeStarGiftAuction#34986ab: field end_date: %w", err)
+		}
+		w.EndDate = value
+	}
+	{
+		value, err := b.Int()
+		if err != nil {
+			return fmt.Errorf("unable to decode webPageAttributeStarGiftAuction#34986ab: field center_color: %w", err)
+		}
+		w.CenterColor = value
+	}
+	{
+		value, err := b.Int()
+		if err != nil {
+			return fmt.Errorf("unable to decode webPageAttributeStarGiftAuction#34986ab: field edge_color: %w", err)
+		}
+		w.EdgeColor = value
+	}
+	{
+		value, err := b.Int()
+		if err != nil {
+			return fmt.Errorf("unable to decode webPageAttributeStarGiftAuction#34986ab: field text_color: %w", err)
+		}
+		w.TextColor = value
+	}
+	return nil
+}
+
+// GetGift returns value of Gift field.
+func (w *WebPageAttributeStarGiftAuction) GetGift() (value StarGiftClass) {
+	if w == nil {
+		return
+	}
+	return w.Gift
+}
+
+// GetEndDate returns value of EndDate field.
+func (w *WebPageAttributeStarGiftAuction) GetEndDate() (value int) {
+	if w == nil {
+		return
+	}
+	return w.EndDate
+}
+
+// GetCenterColor returns value of CenterColor field.
+func (w *WebPageAttributeStarGiftAuction) GetCenterColor() (value int) {
+	if w == nil {
+		return
+	}
+	return w.CenterColor
+}
+
+// GetEdgeColor returns value of EdgeColor field.
+func (w *WebPageAttributeStarGiftAuction) GetEdgeColor() (value int) {
+	if w == nil {
+		return
+	}
+	return w.EdgeColor
+}
+
+// GetTextColor returns value of TextColor field.
+func (w *WebPageAttributeStarGiftAuction) GetTextColor() (value int) {
+	if w == nil {
+		return
+	}
+	return w.TextColor
+}
+
 // WebPageAttributeClassName is schema name of WebPageAttributeClass.
 const WebPageAttributeClassName = "WebPageAttribute"
 
@@ -948,6 +1371,8 @@ const WebPageAttributeClassName = "WebPageAttribute"
 //	case *tg.WebPageAttributeStory: // webPageAttributeStory#2e94c3e7
 //	case *tg.WebPageAttributeStickerSet: // webPageAttributeStickerSet#50cc03d3
 //	case *tg.WebPageAttributeUniqueStarGift: // webPageAttributeUniqueStarGift#cf6f6db8
+//	case *tg.WebPageAttributeStarGiftCollection: // webPageAttributeStarGiftCollection#31cad303
+//	case *tg.WebPageAttributeStarGiftAuction: // webPageAttributeStarGiftAuction#34986ab
 //	default: panic(v)
 //	}
 type WebPageAttributeClass interface {
@@ -1000,6 +1425,20 @@ func DecodeWebPageAttribute(buf *bin.Buffer) (WebPageAttributeClass, error) {
 	case WebPageAttributeUniqueStarGiftTypeID:
 		// Decoding webPageAttributeUniqueStarGift#cf6f6db8.
 		v := WebPageAttributeUniqueStarGift{}
+		if err := v.Decode(buf); err != nil {
+			return nil, fmt.Errorf("unable to decode WebPageAttributeClass: %w", err)
+		}
+		return &v, nil
+	case WebPageAttributeStarGiftCollectionTypeID:
+		// Decoding webPageAttributeStarGiftCollection#31cad303.
+		v := WebPageAttributeStarGiftCollection{}
+		if err := v.Decode(buf); err != nil {
+			return nil, fmt.Errorf("unable to decode WebPageAttributeClass: %w", err)
+		}
+		return &v, nil
+	case WebPageAttributeStarGiftAuctionTypeID:
+		// Decoding webPageAttributeStarGiftAuction#34986ab.
+		v := WebPageAttributeStarGiftAuction{}
 		if err := v.Decode(buf); err != nil {
 			return nil, fmt.Errorf("unable to decode WebPageAttributeClass: %w", err)
 		}

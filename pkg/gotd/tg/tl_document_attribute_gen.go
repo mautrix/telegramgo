@@ -580,8 +580,7 @@ type DocumentAttributeVideo struct {
 	RoundMessage bool
 	// Whether the video supports streaming
 	SupportsStreaming bool
-	// Whether the specified document is a video file with no audio tracks (a GIF animation
-	// (even as MPEG4), for example)
+	// Whether the specified document is a video file with no audio tracks
 	Nosound bool
 	// Duration in seconds
 	Duration float64

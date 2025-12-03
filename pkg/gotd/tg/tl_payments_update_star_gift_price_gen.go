@@ -31,18 +31,25 @@ var (
 	_ = tdjson.Encoder{}
 )
 
-// PaymentsUpdateStarGiftPriceRequest represents TL type `payments.updateStarGiftPrice#3baea4e1`.
+// PaymentsUpdateStarGiftPriceRequest represents TL type `payments.updateStarGiftPrice#edbe6ccb`.
+// A collectible gift we own »¹ can be put up for sale on the gift marketplace »²
+// with this method, see here »³ for more info.
+//
+// Links:
+//  1. https://core.telegram.org/api/gifts#collectible-gifts
+//  2. https://telegram.org/blog/gift-marketplace-and-more
+//  3. https://core.telegram.org/api/gifts#reselling-collectible-gifts
 //
 // See https://core.telegram.org/method/payments.updateStarGiftPrice for reference.
 type PaymentsUpdateStarGiftPriceRequest struct {
-	// Stargift field of PaymentsUpdateStarGiftPriceRequest.
+	// The gift to resell.
 	Stargift InputSavedStarGiftClass
-	// ResellStars field of PaymentsUpdateStarGiftPriceRequest.
-	ResellStars int64
+	// Resale price of the gift.
+	ResellAmount StarsAmountClass
 }
 
 // PaymentsUpdateStarGiftPriceRequestTypeID is TL type id of PaymentsUpdateStarGiftPriceRequest.
-const PaymentsUpdateStarGiftPriceRequestTypeID = 0x3baea4e1
+const PaymentsUpdateStarGiftPriceRequestTypeID = 0xedbe6ccb
 
 // Ensuring interfaces in compile-time for PaymentsUpdateStarGiftPriceRequest.
 var (
@@ -59,7 +66,7 @@ func (u *PaymentsUpdateStarGiftPriceRequest) Zero() bool {
 	if !(u.Stargift == nil) {
 		return false
 	}
-	if !(u.ResellStars == 0) {
+	if !(u.ResellAmount == nil) {
 		return false
 	}
 
@@ -78,10 +85,10 @@ func (u *PaymentsUpdateStarGiftPriceRequest) String() string {
 // FillFrom fills PaymentsUpdateStarGiftPriceRequest from given interface.
 func (u *PaymentsUpdateStarGiftPriceRequest) FillFrom(from interface {
 	GetStargift() (value InputSavedStarGiftClass)
-	GetResellStars() (value int64)
+	GetResellAmount() (value StarsAmountClass)
 }) {
 	u.Stargift = from.GetStargift()
-	u.ResellStars = from.GetResellStars()
+	u.ResellAmount = from.GetResellAmount()
 }
 
 // TypeID returns type id in TL schema.
@@ -112,8 +119,8 @@ func (u *PaymentsUpdateStarGiftPriceRequest) TypeInfo() tdp.Type {
 			SchemaName: "stargift",
 		},
 		{
-			Name:       "ResellStars",
-			SchemaName: "resell_stars",
+			Name:       "ResellAmount",
+			SchemaName: "resell_amount",
 		},
 	}
 	return typ
@@ -122,7 +129,7 @@ func (u *PaymentsUpdateStarGiftPriceRequest) TypeInfo() tdp.Type {
 // Encode implements bin.Encoder.
 func (u *PaymentsUpdateStarGiftPriceRequest) Encode(b *bin.Buffer) error {
 	if u == nil {
-		return fmt.Errorf("can't encode payments.updateStarGiftPrice#3baea4e1 as nil")
+		return fmt.Errorf("can't encode payments.updateStarGiftPrice#edbe6ccb as nil")
 	}
 	b.PutID(PaymentsUpdateStarGiftPriceRequestTypeID)
 	return u.EncodeBare(b)
@@ -131,25 +138,30 @@ func (u *PaymentsUpdateStarGiftPriceRequest) Encode(b *bin.Buffer) error {
 // EncodeBare implements bin.BareEncoder.
 func (u *PaymentsUpdateStarGiftPriceRequest) EncodeBare(b *bin.Buffer) error {
 	if u == nil {
-		return fmt.Errorf("can't encode payments.updateStarGiftPrice#3baea4e1 as nil")
+		return fmt.Errorf("can't encode payments.updateStarGiftPrice#edbe6ccb as nil")
 	}
 	if u.Stargift == nil {
-		return fmt.Errorf("unable to encode payments.updateStarGiftPrice#3baea4e1: field stargift is nil")
+		return fmt.Errorf("unable to encode payments.updateStarGiftPrice#edbe6ccb: field stargift is nil")
 	}
 	if err := u.Stargift.Encode(b); err != nil {
-		return fmt.Errorf("unable to encode payments.updateStarGiftPrice#3baea4e1: field stargift: %w", err)
+		return fmt.Errorf("unable to encode payments.updateStarGiftPrice#edbe6ccb: field stargift: %w", err)
 	}
-	b.PutLong(u.ResellStars)
+	if u.ResellAmount == nil {
+		return fmt.Errorf("unable to encode payments.updateStarGiftPrice#edbe6ccb: field resell_amount is nil")
+	}
+	if err := u.ResellAmount.Encode(b); err != nil {
+		return fmt.Errorf("unable to encode payments.updateStarGiftPrice#edbe6ccb: field resell_amount: %w", err)
+	}
 	return nil
 }
 
 // Decode implements bin.Decoder.
 func (u *PaymentsUpdateStarGiftPriceRequest) Decode(b *bin.Buffer) error {
 	if u == nil {
-		return fmt.Errorf("can't decode payments.updateStarGiftPrice#3baea4e1 to nil")
+		return fmt.Errorf("can't decode payments.updateStarGiftPrice#edbe6ccb to nil")
 	}
 	if err := b.ConsumeID(PaymentsUpdateStarGiftPriceRequestTypeID); err != nil {
-		return fmt.Errorf("unable to decode payments.updateStarGiftPrice#3baea4e1: %w", err)
+		return fmt.Errorf("unable to decode payments.updateStarGiftPrice#edbe6ccb: %w", err)
 	}
 	return u.DecodeBare(b)
 }
@@ -157,21 +169,21 @@ func (u *PaymentsUpdateStarGiftPriceRequest) Decode(b *bin.Buffer) error {
 // DecodeBare implements bin.BareDecoder.
 func (u *PaymentsUpdateStarGiftPriceRequest) DecodeBare(b *bin.Buffer) error {
 	if u == nil {
-		return fmt.Errorf("can't decode payments.updateStarGiftPrice#3baea4e1 to nil")
+		return fmt.Errorf("can't decode payments.updateStarGiftPrice#edbe6ccb to nil")
 	}
 	{
 		value, err := DecodeInputSavedStarGift(b)
 		if err != nil {
-			return fmt.Errorf("unable to decode payments.updateStarGiftPrice#3baea4e1: field stargift: %w", err)
+			return fmt.Errorf("unable to decode payments.updateStarGiftPrice#edbe6ccb: field stargift: %w", err)
 		}
 		u.Stargift = value
 	}
 	{
-		value, err := b.Long()
+		value, err := DecodeStarsAmount(b)
 		if err != nil {
-			return fmt.Errorf("unable to decode payments.updateStarGiftPrice#3baea4e1: field resell_stars: %w", err)
+			return fmt.Errorf("unable to decode payments.updateStarGiftPrice#edbe6ccb: field resell_amount: %w", err)
 		}
-		u.ResellStars = value
+		u.ResellAmount = value
 	}
 	return nil
 }
@@ -184,15 +196,27 @@ func (u *PaymentsUpdateStarGiftPriceRequest) GetStargift() (value InputSavedStar
 	return u.Stargift
 }
 
-// GetResellStars returns value of ResellStars field.
-func (u *PaymentsUpdateStarGiftPriceRequest) GetResellStars() (value int64) {
+// GetResellAmount returns value of ResellAmount field.
+func (u *PaymentsUpdateStarGiftPriceRequest) GetResellAmount() (value StarsAmountClass) {
 	if u == nil {
 		return
 	}
-	return u.ResellStars
+	return u.ResellAmount
 }
 
-// PaymentsUpdateStarGiftPrice invokes method payments.updateStarGiftPrice#3baea4e1 returning error if any.
+// PaymentsUpdateStarGiftPrice invokes method payments.updateStarGiftPrice#edbe6ccb returning error if any.
+// A collectible gift we own »¹ can be put up for sale on the gift marketplace »²
+// with this method, see here »³ for more info.
+//
+// Links:
+//  1. https://core.telegram.org/api/gifts#collectible-gifts
+//  2. https://telegram.org/blog/gift-marketplace-and-more
+//  3. https://core.telegram.org/api/gifts#reselling-collectible-gifts
+//
+// Possible errors:
+//
+//	400 SAVED_ID_EMPTY: The passed inputSavedStarGiftChat.saved_id is empty.
+//	400 STARGIFT_NOT_FOUND: The specified gift was not found.
 //
 // See https://core.telegram.org/method/payments.updateStarGiftPrice for reference.
 func (c *Client) PaymentsUpdateStarGiftPrice(ctx context.Context, request *PaymentsUpdateStarGiftPriceRequest) (UpdatesClass, error) {

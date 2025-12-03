@@ -48,7 +48,7 @@ var (
 //
 // See https://core.telegram.org/method/payments.convertStarGift for reference.
 type PaymentsConvertStarGiftRequest struct {
-	// Stargift field of PaymentsConvertStarGiftRequest.
+	// The gift to convert.
 	Stargift InputSavedStarGiftClass
 }
 
@@ -193,8 +193,15 @@ func (c *PaymentsConvertStarGiftRequest) GetStargift() (value InputSavedStarGift
 //  4. https://core.telegram.org/constructor/starGift
 //  5. https://core.telegram.org/constructor/starGift
 //
+// Possible errors:
+//
+//	400 BUSINESS_CONNECTION_INVALID: The connection_id passed to the wrapping invokeWithBusinessConnection call is invalid.
+//	400 MESSAGE_ID_INVALID: The provided message id is invalid.
+//	400 SAVED_ID_EMPTY: The passed inputSavedStarGiftChat.saved_id is empty.
+//	400 STARGIFT_PEER_INVALID: The specified inputSavedStarGiftChat.peer is invalid.
+//	400 USER_ID_INVALID: The provided user ID is invalid.
+//
 // See https://core.telegram.org/method/payments.convertStarGift for reference.
-// Can be used by bots.
 func (c *Client) PaymentsConvertStarGift(ctx context.Context, stargift InputSavedStarGiftClass) (bool, error) {
 	var result BoolBox
 

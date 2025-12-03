@@ -34,3 +34,48 @@ func (s *MessagesGetQuickReplies) computeHash(v *tg.MessagesQuickReplies) int64 
 
 	return h.Sum()
 }
+
+func (s *PaymentsGetStarGiftCollections) computeHash(v *tg.PaymentsStarGiftCollections) int64 {
+	collections := v.Collections
+
+	sort.SliceStable(collections, func(i, j int) bool {
+		return collections[i].CollectionID < collections[j].CollectionID
+	})
+
+	h := hasher.Hasher{}
+	for _, collection := range collections {
+		h.Update(uint32(collection.CollectionID))
+	}
+
+	return h.Sum()
+}
+
+func (s *AccountGetSavedMusicIDs) computeHash(v *tg.AccountSavedMusicIDs) int64 {
+	ids := v.IDs
+
+	sort.SliceStable(ids, func(i, j int) bool {
+		return ids[i] < ids[j]
+	})
+
+	h := hasher.Hasher{}
+	for _, id := range ids {
+		h.Update(uint32(id))
+	}
+
+	return h.Sum()
+}
+
+func (s *PaymentsGetStarGiftActiveAuctions) computeHash(v *tg.PaymentsStarGiftActiveAuctions) int64 {
+	auctions := v.Auctions
+
+	sort.SliceStable(auctions, func(i, j int) bool {
+		return auctions[i].GetGift().GetID() < auctions[j].GetGift().GetID()
+	})
+
+	h := hasher.Hasher{}
+	for _, auction := range auctions {
+		h.Update(uint32(auction.GetGift().GetID()))
+	}
+
+	return h.Sum()
+}

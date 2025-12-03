@@ -31,11 +31,16 @@ var (
 	_ = tdjson.Encoder{}
 )
 
-// StoriesSendStoryRequest represents TL type `stories.sendStory#e4e6694b`.
+// StoriesSendStoryRequest represents TL type `stories.sendStory#737fc2ec`.
 // Uploads a Telegram Story¹.
+// May also be used in a business connection¹, not by wrapping the query in
+// invokeWithBusinessConnection »², but rather by specifying the ID of a controlled
+// business user in peer.
 //
 // Links:
 //  1. https://core.telegram.org/api/stories
+//  2. https://core.telegram.org/api/bots/connected-business-bots
+//  3. https://core.telegram.org/method/invokeWithBusinessConnection
 //
 // See https://core.telegram.org/method/stories.sendStory for reference.
 type StoriesSendStoryRequest struct {
@@ -103,10 +108,14 @@ type StoriesSendStoryRequest struct {
 	//
 	// Use SetFwdFromStory and GetFwdFromStory helpers.
 	FwdFromStory int
+	// If set, adds the story to the specified albums.
+	//
+	// Use SetAlbums and GetAlbums helpers.
+	Albums []int
 }
 
 // StoriesSendStoryRequestTypeID is TL type id of StoriesSendStoryRequest.
-const StoriesSendStoryRequestTypeID = 0xe4e6694b
+const StoriesSendStoryRequestTypeID = 0x737fc2ec
 
 // Ensuring interfaces in compile-time for StoriesSendStoryRequest.
 var (
@@ -162,6 +171,9 @@ func (s *StoriesSendStoryRequest) Zero() bool {
 	if !(s.FwdFromStory == 0) {
 		return false
 	}
+	if !(s.Albums == nil) {
+		return false
+	}
 
 	return true
 }
@@ -190,6 +202,7 @@ func (s *StoriesSendStoryRequest) FillFrom(from interface {
 	GetPeriod() (value int, ok bool)
 	GetFwdFromID() (value InputPeerClass, ok bool)
 	GetFwdFromStory() (value int, ok bool)
+	GetAlbums() (value []int, ok bool)
 }) {
 	s.Pinned = from.GetPinned()
 	s.Noforwards = from.GetNoforwards()
@@ -220,6 +233,10 @@ func (s *StoriesSendStoryRequest) FillFrom(from interface {
 
 	if val, ok := from.GetFwdFromStory(); ok {
 		s.FwdFromStory = val
+	}
+
+	if val, ok := from.GetAlbums(); ok {
+		s.Albums = val
 	}
 
 }
@@ -308,6 +325,11 @@ func (s *StoriesSendStoryRequest) TypeInfo() tdp.Type {
 			SchemaName: "fwd_from_story",
 			Null:       !s.Flags.Has(6),
 		},
+		{
+			Name:       "Albums",
+			SchemaName: "albums",
+			Null:       !s.Flags.Has(8),
+		},
 	}
 	return typ
 }
@@ -341,12 +363,15 @@ func (s *StoriesSendStoryRequest) SetFlags() {
 	if !(s.FwdFromStory == 0) {
 		s.Flags.Set(6)
 	}
+	if !(s.Albums == nil) {
+		s.Flags.Set(8)
+	}
 }
 
 // Encode implements bin.Encoder.
 func (s *StoriesSendStoryRequest) Encode(b *bin.Buffer) error {
 	if s == nil {
-		return fmt.Errorf("can't encode stories.sendStory#e4e6694b as nil")
+		return fmt.Errorf("can't encode stories.sendStory#737fc2ec as nil")
 	}
 	b.PutID(StoriesSendStoryRequestTypeID)
 	return s.EncodeBare(b)
@@ -355,32 +380,32 @@ func (s *StoriesSendStoryRequest) Encode(b *bin.Buffer) error {
 // EncodeBare implements bin.BareEncoder.
 func (s *StoriesSendStoryRequest) EncodeBare(b *bin.Buffer) error {
 	if s == nil {
-		return fmt.Errorf("can't encode stories.sendStory#e4e6694b as nil")
+		return fmt.Errorf("can't encode stories.sendStory#737fc2ec as nil")
 	}
 	s.SetFlags()
 	if err := s.Flags.Encode(b); err != nil {
-		return fmt.Errorf("unable to encode stories.sendStory#e4e6694b: field flags: %w", err)
+		return fmt.Errorf("unable to encode stories.sendStory#737fc2ec: field flags: %w", err)
 	}
 	if s.Peer == nil {
-		return fmt.Errorf("unable to encode stories.sendStory#e4e6694b: field peer is nil")
+		return fmt.Errorf("unable to encode stories.sendStory#737fc2ec: field peer is nil")
 	}
 	if err := s.Peer.Encode(b); err != nil {
-		return fmt.Errorf("unable to encode stories.sendStory#e4e6694b: field peer: %w", err)
+		return fmt.Errorf("unable to encode stories.sendStory#737fc2ec: field peer: %w", err)
 	}
 	if s.Media == nil {
-		return fmt.Errorf("unable to encode stories.sendStory#e4e6694b: field media is nil")
+		return fmt.Errorf("unable to encode stories.sendStory#737fc2ec: field media is nil")
 	}
 	if err := s.Media.Encode(b); err != nil {
-		return fmt.Errorf("unable to encode stories.sendStory#e4e6694b: field media: %w", err)
+		return fmt.Errorf("unable to encode stories.sendStory#737fc2ec: field media: %w", err)
 	}
 	if s.Flags.Has(5) {
 		b.PutVectorHeader(len(s.MediaAreas))
 		for idx, v := range s.MediaAreas {
 			if v == nil {
-				return fmt.Errorf("unable to encode stories.sendStory#e4e6694b: field media_areas element with index %d is nil", idx)
+				return fmt.Errorf("unable to encode stories.sendStory#737fc2ec: field media_areas element with index %d is nil", idx)
 			}
 			if err := v.Encode(b); err != nil {
-				return fmt.Errorf("unable to encode stories.sendStory#e4e6694b: field media_areas element with index %d: %w", idx, err)
+				return fmt.Errorf("unable to encode stories.sendStory#737fc2ec: field media_areas element with index %d: %w", idx, err)
 			}
 		}
 	}
@@ -391,20 +416,20 @@ func (s *StoriesSendStoryRequest) EncodeBare(b *bin.Buffer) error {
 		b.PutVectorHeader(len(s.Entities))
 		for idx, v := range s.Entities {
 			if v == nil {
-				return fmt.Errorf("unable to encode stories.sendStory#e4e6694b: field entities element with index %d is nil", idx)
+				return fmt.Errorf("unable to encode stories.sendStory#737fc2ec: field entities element with index %d is nil", idx)
 			}
 			if err := v.Encode(b); err != nil {
-				return fmt.Errorf("unable to encode stories.sendStory#e4e6694b: field entities element with index %d: %w", idx, err)
+				return fmt.Errorf("unable to encode stories.sendStory#737fc2ec: field entities element with index %d: %w", idx, err)
 			}
 		}
 	}
 	b.PutVectorHeader(len(s.PrivacyRules))
 	for idx, v := range s.PrivacyRules {
 		if v == nil {
-			return fmt.Errorf("unable to encode stories.sendStory#e4e6694b: field privacy_rules element with index %d is nil", idx)
+			return fmt.Errorf("unable to encode stories.sendStory#737fc2ec: field privacy_rules element with index %d is nil", idx)
 		}
 		if err := v.Encode(b); err != nil {
-			return fmt.Errorf("unable to encode stories.sendStory#e4e6694b: field privacy_rules element with index %d: %w", idx, err)
+			return fmt.Errorf("unable to encode stories.sendStory#737fc2ec: field privacy_rules element with index %d: %w", idx, err)
 		}
 	}
 	b.PutLong(s.RandomID)
@@ -413,14 +438,20 @@ func (s *StoriesSendStoryRequest) EncodeBare(b *bin.Buffer) error {
 	}
 	if s.Flags.Has(6) {
 		if s.FwdFromID == nil {
-			return fmt.Errorf("unable to encode stories.sendStory#e4e6694b: field fwd_from_id is nil")
+			return fmt.Errorf("unable to encode stories.sendStory#737fc2ec: field fwd_from_id is nil")
 		}
 		if err := s.FwdFromID.Encode(b); err != nil {
-			return fmt.Errorf("unable to encode stories.sendStory#e4e6694b: field fwd_from_id: %w", err)
+			return fmt.Errorf("unable to encode stories.sendStory#737fc2ec: field fwd_from_id: %w", err)
 		}
 	}
 	if s.Flags.Has(6) {
 		b.PutInt(s.FwdFromStory)
+	}
+	if s.Flags.Has(8) {
+		b.PutVectorHeader(len(s.Albums))
+		for _, v := range s.Albums {
+			b.PutInt(v)
+		}
 	}
 	return nil
 }
@@ -428,10 +459,10 @@ func (s *StoriesSendStoryRequest) EncodeBare(b *bin.Buffer) error {
 // Decode implements bin.Decoder.
 func (s *StoriesSendStoryRequest) Decode(b *bin.Buffer) error {
 	if s == nil {
-		return fmt.Errorf("can't decode stories.sendStory#e4e6694b to nil")
+		return fmt.Errorf("can't decode stories.sendStory#737fc2ec to nil")
 	}
 	if err := b.ConsumeID(StoriesSendStoryRequestTypeID); err != nil {
-		return fmt.Errorf("unable to decode stories.sendStory#e4e6694b: %w", err)
+		return fmt.Errorf("unable to decode stories.sendStory#737fc2ec: %w", err)
 	}
 	return s.DecodeBare(b)
 }
@@ -439,11 +470,11 @@ func (s *StoriesSendStoryRequest) Decode(b *bin.Buffer) error {
 // DecodeBare implements bin.BareDecoder.
 func (s *StoriesSendStoryRequest) DecodeBare(b *bin.Buffer) error {
 	if s == nil {
-		return fmt.Errorf("can't decode stories.sendStory#e4e6694b to nil")
+		return fmt.Errorf("can't decode stories.sendStory#737fc2ec to nil")
 	}
 	{
 		if err := s.Flags.Decode(b); err != nil {
-			return fmt.Errorf("unable to decode stories.sendStory#e4e6694b: field flags: %w", err)
+			return fmt.Errorf("unable to decode stories.sendStory#737fc2ec: field flags: %w", err)
 		}
 	}
 	s.Pinned = s.Flags.Has(2)
@@ -452,21 +483,21 @@ func (s *StoriesSendStoryRequest) DecodeBare(b *bin.Buffer) error {
 	{
 		value, err := DecodeInputPeer(b)
 		if err != nil {
-			return fmt.Errorf("unable to decode stories.sendStory#e4e6694b: field peer: %w", err)
+			return fmt.Errorf("unable to decode stories.sendStory#737fc2ec: field peer: %w", err)
 		}
 		s.Peer = value
 	}
 	{
 		value, err := DecodeInputMedia(b)
 		if err != nil {
-			return fmt.Errorf("unable to decode stories.sendStory#e4e6694b: field media: %w", err)
+			return fmt.Errorf("unable to decode stories.sendStory#737fc2ec: field media: %w", err)
 		}
 		s.Media = value
 	}
 	if s.Flags.Has(5) {
 		headerLen, err := b.VectorHeader()
 		if err != nil {
-			return fmt.Errorf("unable to decode stories.sendStory#e4e6694b: field media_areas: %w", err)
+			return fmt.Errorf("unable to decode stories.sendStory#737fc2ec: field media_areas: %w", err)
 		}
 
 		if headerLen > 0 {
@@ -475,7 +506,7 @@ func (s *StoriesSendStoryRequest) DecodeBare(b *bin.Buffer) error {
 		for idx := 0; idx < headerLen; idx++ {
 			value, err := DecodeMediaArea(b)
 			if err != nil {
-				return fmt.Errorf("unable to decode stories.sendStory#e4e6694b: field media_areas: %w", err)
+				return fmt.Errorf("unable to decode stories.sendStory#737fc2ec: field media_areas: %w", err)
 			}
 			s.MediaAreas = append(s.MediaAreas, value)
 		}
@@ -483,14 +514,14 @@ func (s *StoriesSendStoryRequest) DecodeBare(b *bin.Buffer) error {
 	if s.Flags.Has(0) {
 		value, err := b.String()
 		if err != nil {
-			return fmt.Errorf("unable to decode stories.sendStory#e4e6694b: field caption: %w", err)
+			return fmt.Errorf("unable to decode stories.sendStory#737fc2ec: field caption: %w", err)
 		}
 		s.Caption = value
 	}
 	if s.Flags.Has(1) {
 		headerLen, err := b.VectorHeader()
 		if err != nil {
-			return fmt.Errorf("unable to decode stories.sendStory#e4e6694b: field entities: %w", err)
+			return fmt.Errorf("unable to decode stories.sendStory#737fc2ec: field entities: %w", err)
 		}
 
 		if headerLen > 0 {
@@ -499,7 +530,7 @@ func (s *StoriesSendStoryRequest) DecodeBare(b *bin.Buffer) error {
 		for idx := 0; idx < headerLen; idx++ {
 			value, err := DecodeMessageEntity(b)
 			if err != nil {
-				return fmt.Errorf("unable to decode stories.sendStory#e4e6694b: field entities: %w", err)
+				return fmt.Errorf("unable to decode stories.sendStory#737fc2ec: field entities: %w", err)
 			}
 			s.Entities = append(s.Entities, value)
 		}
@@ -507,7 +538,7 @@ func (s *StoriesSendStoryRequest) DecodeBare(b *bin.Buffer) error {
 	{
 		headerLen, err := b.VectorHeader()
 		if err != nil {
-			return fmt.Errorf("unable to decode stories.sendStory#e4e6694b: field privacy_rules: %w", err)
+			return fmt.Errorf("unable to decode stories.sendStory#737fc2ec: field privacy_rules: %w", err)
 		}
 
 		if headerLen > 0 {
@@ -516,7 +547,7 @@ func (s *StoriesSendStoryRequest) DecodeBare(b *bin.Buffer) error {
 		for idx := 0; idx < headerLen; idx++ {
 			value, err := DecodeInputPrivacyRule(b)
 			if err != nil {
-				return fmt.Errorf("unable to decode stories.sendStory#e4e6694b: field privacy_rules: %w", err)
+				return fmt.Errorf("unable to decode stories.sendStory#737fc2ec: field privacy_rules: %w", err)
 			}
 			s.PrivacyRules = append(s.PrivacyRules, value)
 		}
@@ -524,30 +555,47 @@ func (s *StoriesSendStoryRequest) DecodeBare(b *bin.Buffer) error {
 	{
 		value, err := b.Long()
 		if err != nil {
-			return fmt.Errorf("unable to decode stories.sendStory#e4e6694b: field random_id: %w", err)
+			return fmt.Errorf("unable to decode stories.sendStory#737fc2ec: field random_id: %w", err)
 		}
 		s.RandomID = value
 	}
 	if s.Flags.Has(3) {
 		value, err := b.Int()
 		if err != nil {
-			return fmt.Errorf("unable to decode stories.sendStory#e4e6694b: field period: %w", err)
+			return fmt.Errorf("unable to decode stories.sendStory#737fc2ec: field period: %w", err)
 		}
 		s.Period = value
 	}
 	if s.Flags.Has(6) {
 		value, err := DecodeInputPeer(b)
 		if err != nil {
-			return fmt.Errorf("unable to decode stories.sendStory#e4e6694b: field fwd_from_id: %w", err)
+			return fmt.Errorf("unable to decode stories.sendStory#737fc2ec: field fwd_from_id: %w", err)
 		}
 		s.FwdFromID = value
 	}
 	if s.Flags.Has(6) {
 		value, err := b.Int()
 		if err != nil {
-			return fmt.Errorf("unable to decode stories.sendStory#e4e6694b: field fwd_from_story: %w", err)
+			return fmt.Errorf("unable to decode stories.sendStory#737fc2ec: field fwd_from_story: %w", err)
 		}
 		s.FwdFromStory = value
+	}
+	if s.Flags.Has(8) {
+		headerLen, err := b.VectorHeader()
+		if err != nil {
+			return fmt.Errorf("unable to decode stories.sendStory#737fc2ec: field albums: %w", err)
+		}
+
+		if headerLen > 0 {
+			s.Albums = make([]int, 0, headerLen%bin.PreallocateLimit)
+		}
+		for idx := 0; idx < headerLen; idx++ {
+			value, err := b.Int()
+			if err != nil {
+				return fmt.Errorf("unable to decode stories.sendStory#737fc2ec: field albums: %w", err)
+			}
+			s.Albums = append(s.Albums, value)
+		}
 	}
 	return nil
 }
@@ -749,6 +797,24 @@ func (s *StoriesSendStoryRequest) GetFwdFromStory() (value int, ok bool) {
 	return s.FwdFromStory, true
 }
 
+// SetAlbums sets value of Albums conditional field.
+func (s *StoriesSendStoryRequest) SetAlbums(value []int) {
+	s.Flags.Set(8)
+	s.Albums = value
+}
+
+// GetAlbums returns value of Albums conditional field and
+// boolean which is true if field was set.
+func (s *StoriesSendStoryRequest) GetAlbums() (value []int, ok bool) {
+	if s == nil {
+		return
+	}
+	if !s.Flags.Has(8) {
+		return value, false
+	}
+	return s.Albums, true
+}
+
 // MapMediaAreas returns field MediaAreas wrapped in MediaAreaClassArray helper.
 func (s *StoriesSendStoryRequest) MapMediaAreas() (value MediaAreaClassArray, ok bool) {
 	if !s.Flags.Has(5) {
@@ -770,15 +836,23 @@ func (s *StoriesSendStoryRequest) MapPrivacyRules() (value InputPrivacyRuleClass
 	return InputPrivacyRuleClassArray(s.PrivacyRules)
 }
 
-// StoriesSendStory invokes method stories.sendStory#e4e6694b returning error if any.
+// StoriesSendStory invokes method stories.sendStory#737fc2ec returning error if any.
 // Uploads a Telegram Story¹.
+// May also be used in a business connection¹, not by wrapping the query in
+// invokeWithBusinessConnection »², but rather by specifying the ID of a controlled
+// business user in peer.
 //
 // Links:
 //  1. https://core.telegram.org/api/stories
+//  2. https://core.telegram.org/api/bots/connected-business-bots
+//  3. https://core.telegram.org/method/invokeWithBusinessConnection
 //
 // Possible errors:
 //
 //	400 BOOSTS_REQUIRED: The specified channel must first be boosted by its users in order to perform this action.
+//	403 BOT_ACCESS_FORBIDDEN: The specified method can be used over a business connection for some operations, but the specified query attempted an operation that is not allowed over a business connection.
+//	400 CHANNEL_INVALID: The provided channel is invalid.
+//	400 CHAT_ADMIN_REQUIRED: You must be an admin in this chat to do this.
 //	400 IMAGE_PROCESS_FAILED: Failure while processing image.
 //	400 MEDIA_EMPTY: The provided media object is invalid.
 //	400 MEDIA_FILE_INVALID: The specified media file is invalid.

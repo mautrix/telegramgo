@@ -33,18 +33,21 @@ var (
 
 // RestrictionReason represents TL type `restrictionReason#d072acb4`.
 // Restriction reason.
-// Contains the reason why access to a certain object must be restricted. Clients are
-// supposed to deny access to the channel if the platform field is equal to all or to the
-// current platform (ios, android, wp, etc.). Platforms can be concatenated (ios-android,
-// ios-wp), unknown platforms are to be ignored. The text is the error message that
-// should be shown to the user.
+// See here »¹ for the full flow to use for restricted or age-gated content.
+//
+// Links:
+//  1. https://core.telegram.org/api/age-verification
 //
 // See https://core.telegram.org/constructor/restrictionReason for reference.
 type RestrictionReason struct {
 	// Platform identifier (ios, android, wp, all, etc.), can be concatenated with a dash as
 	// separator (android-ios, ios-wp, etc)
 	Platform string
-	// Restriction reason (porno, terms, etc.)
+	// Restriction reason (porno, terms, etc.). Ignore this restriction reason if it is
+	// contained in the ignore_restriction_reasons »¹ client configuration parameter.
+	//
+	// Links:
+	//  1) https://core.telegram.org/api/config#ignore-restriction-reasons
 	Reason string
 	// Error message to be shown to the user
 	Text string

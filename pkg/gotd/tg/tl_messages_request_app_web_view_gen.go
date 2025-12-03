@@ -55,14 +55,19 @@ type MessagesRequestAppWebViewRequest struct {
 	// Links:
 	//  1) https://core.telegram.org/api/links#direct-mini-app-links
 	WriteAllowed bool
-	// If set, requests to open the mini app in compact mode (as opposed to fullview mode).
-	// Must be set if the mode parameter of the direct Mini App deep link¹ is equal to
-	// compact.
+	// If set, requests to open the mini app in compact mode (as opposed to normal or
+	// fullscreen mode). Must be set if the mode parameter of the direct Mini App deep link¹
+	// is equal to compact.
 	//
 	// Links:
 	//  1) https://core.telegram.org/api/links#direct-mini-app-links
 	Compact bool
-	// Fullscreen field of MessagesRequestAppWebViewRequest.
+	// If set, requests to open the mini app in fullscreen mode (as opposed to compact or
+	// normal mode). Must be set if the mode parameter of the direct Mini App deep link¹ is
+	// equal to fullscreen.
+	//
+	// Links:
+	//  1) https://core.telegram.org/api/links#direct-mini-app-links
 	Fullscreen bool
 	// If the client has clicked on the link in a Telegram chat, pass the chat's peer
 	// information; otherwise pass the bot's peer information, instead.
@@ -490,8 +495,11 @@ func (r *MessagesRequestAppWebViewRequest) GetPlatform() (value string) {
 //
 // Possible errors:
 //
+//	400 BOT_APP_BOT_INVALID: The bot_id passed in the inputBotAppShortName constructor is invalid.
 //	400 BOT_APP_INVALID: The specified bot app is invalid.
 //	400 BOT_APP_SHORTNAME_INVALID: The specified bot app short name is invalid.
+//	400 MSG_ID_INVALID: Invalid message ID provided.
+//	400 THEME_PARAMS_INVALID: The specified theme_params field is invalid.
 //
 // See https://core.telegram.org/method/messages.requestAppWebView for reference.
 func (c *Client) MessagesRequestAppWebView(ctx context.Context, request *MessagesRequestAppWebViewRequest) (*WebViewResultURL, error) {

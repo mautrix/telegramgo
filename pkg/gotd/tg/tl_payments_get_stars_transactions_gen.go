@@ -52,6 +52,8 @@ type PaymentsGetStarsTransactionsRequest struct {
 	Outbound bool
 	// Return transactions in ascending order by date (instead of descending order by date).
 	Ascending bool
+	// If set, returns the channel/ad revenue transactions in nanotons, instead.
+	Ton bool
 	// If set, fetches only transactions for the specified Telegram Star subscription »¹.
 	//
 	// Links:
@@ -104,6 +106,9 @@ func (g *PaymentsGetStarsTransactionsRequest) Zero() bool {
 	if !(g.Ascending == false) {
 		return false
 	}
+	if !(g.Ton == false) {
+		return false
+	}
 	if !(g.SubscriptionID == "") {
 		return false
 	}
@@ -134,6 +139,7 @@ func (g *PaymentsGetStarsTransactionsRequest) FillFrom(from interface {
 	GetInbound() (value bool)
 	GetOutbound() (value bool)
 	GetAscending() (value bool)
+	GetTon() (value bool)
 	GetSubscriptionID() (value string, ok bool)
 	GetPeer() (value InputPeerClass)
 	GetOffset() (value string)
@@ -142,6 +148,7 @@ func (g *PaymentsGetStarsTransactionsRequest) FillFrom(from interface {
 	g.Inbound = from.GetInbound()
 	g.Outbound = from.GetOutbound()
 	g.Ascending = from.GetAscending()
+	g.Ton = from.GetTon()
 	if val, ok := from.GetSubscriptionID(); ok {
 		g.SubscriptionID = val
 	}
@@ -190,6 +197,11 @@ func (g *PaymentsGetStarsTransactionsRequest) TypeInfo() tdp.Type {
 			Null:       !g.Flags.Has(2),
 		},
 		{
+			Name:       "Ton",
+			SchemaName: "ton",
+			Null:       !g.Flags.Has(4),
+		},
+		{
 			Name:       "SubscriptionID",
 			SchemaName: "subscription_id",
 			Null:       !g.Flags.Has(3),
@@ -220,6 +232,9 @@ func (g *PaymentsGetStarsTransactionsRequest) SetFlags() {
 	}
 	if !(g.Ascending == false) {
 		g.Flags.Set(2)
+	}
+	if !(g.Ton == false) {
+		g.Flags.Set(4)
 	}
 	if !(g.SubscriptionID == "") {
 		g.Flags.Set(3)
@@ -282,6 +297,7 @@ func (g *PaymentsGetStarsTransactionsRequest) DecodeBare(b *bin.Buffer) error {
 	g.Inbound = g.Flags.Has(0)
 	g.Outbound = g.Flags.Has(1)
 	g.Ascending = g.Flags.Has(2)
+	g.Ton = g.Flags.Has(4)
 	if g.Flags.Has(3) {
 		value, err := b.String()
 		if err != nil {
@@ -370,6 +386,25 @@ func (g *PaymentsGetStarsTransactionsRequest) GetAscending() (value bool) {
 	return g.Flags.Has(2)
 }
 
+// SetTon sets value of Ton conditional field.
+func (g *PaymentsGetStarsTransactionsRequest) SetTon(value bool) {
+	if value {
+		g.Flags.Set(4)
+		g.Ton = true
+	} else {
+		g.Flags.Unset(4)
+		g.Ton = false
+	}
+}
+
+// GetTon returns value of Ton conditional field.
+func (g *PaymentsGetStarsTransactionsRequest) GetTon() (value bool) {
+	if g == nil {
+		return
+	}
+	return g.Flags.Has(4)
+}
+
 // SetSubscriptionID sets value of SubscriptionID conditional field.
 func (g *PaymentsGetStarsTransactionsRequest) SetSubscriptionID(value string) {
 	g.Flags.Set(3)
@@ -424,9 +459,9 @@ func (g *PaymentsGetStarsTransactionsRequest) GetLimit() (value int) {
 //
 //	400 CHAT_ADMIN_REQUIRED: You must be an admin in this chat to do this.
 //	400 PEER_ID_INVALID: The provided peer id is invalid.
+//	400 SUBSCRIPTION_ID_INVALID: The specified subscription_id is invalid.
 //
 // See https://core.telegram.org/method/payments.getStarsTransactions for reference.
-// Can be used by bots.
 func (c *Client) PaymentsGetStarsTransactions(ctx context.Context, request *PaymentsGetStarsTransactionsRequest) (*PaymentsStarsStatus, error) {
 	var result PaymentsStarsStatus
 

@@ -258,26 +258,45 @@ func (s *SavedDialog) GetTopMessage() (value int) {
 }
 
 // MonoForumDialog represents TL type `monoForumDialog#64407ea7`.
+// Represents a monoforum topic »¹.
+//
+// Links:
+//  1. https://core.telegram.org/api/monoforum
 //
 // See https://core.telegram.org/constructor/monoForumDialog for reference.
 type MonoForumDialog struct {
-	// Flags field of MonoForumDialog.
+	// Flags, see TL conditional fields¹
+	//
+	// Links:
+	//  1) https://core.telegram.org/mtproto/TL-combinators#conditional-fields
 	Flags bin.Fields
-	// UnreadMark field of MonoForumDialog.
+	// Whether this topic has a manually set (with messages.markDialogUnread¹) unread mark.
+	//
+	// Links:
+	//  1) https://core.telegram.org/method/messages.markDialogUnread
 	UnreadMark bool
-	// Peer field of MonoForumDialog.
+	// If set, an admin has exempted this peer from payment to send messages using account
+	// toggleNoPaidMessagesException¹.
+	//
+	// Links:
+	//  1) https://core.telegram.org/method/account.toggleNoPaidMessagesException
+	NopaidMessagesException bool
+	// The peer associated to the topic, AKA the topic ID.
 	Peer PeerClass
-	// TopMessage field of MonoForumDialog.
+	// The latest message ID
 	TopMessage int
-	// ReadInboxMaxID field of MonoForumDialog.
+	// Position up to which all incoming messages are read.
 	ReadInboxMaxID int
-	// ReadOutboxMaxID field of MonoForumDialog.
+	// Position up to which all outgoing messages are read.
 	ReadOutboxMaxID int
-	// UnreadCount field of MonoForumDialog.
+	// Number of unread messages.
 	UnreadCount int
-	// UnreadReactionsCount field of MonoForumDialog.
+	// Number of unread reactions.
 	UnreadReactionsCount int
-	// Draft field of MonoForumDialog.
+	// A pending message draft¹.
+	//
+	// Links:
+	//  1) https://core.telegram.org/api/drafts
 	//
 	// Use SetDraft and GetDraft helpers.
 	Draft DraftMessageClass
@@ -307,6 +326,9 @@ func (m *MonoForumDialog) Zero() bool {
 		return false
 	}
 	if !(m.UnreadMark == false) {
+		return false
+	}
+	if !(m.NopaidMessagesException == false) {
 		return false
 	}
 	if !(m.Peer == nil) {
@@ -346,6 +368,7 @@ func (m *MonoForumDialog) String() string {
 // FillFrom fills MonoForumDialog from given interface.
 func (m *MonoForumDialog) FillFrom(from interface {
 	GetUnreadMark() (value bool)
+	GetNopaidMessagesException() (value bool)
 	GetPeer() (value PeerClass)
 	GetTopMessage() (value int)
 	GetReadInboxMaxID() (value int)
@@ -355,6 +378,7 @@ func (m *MonoForumDialog) FillFrom(from interface {
 	GetDraft() (value DraftMessageClass, ok bool)
 }) {
 	m.UnreadMark = from.GetUnreadMark()
+	m.NopaidMessagesException = from.GetNopaidMessagesException()
 	m.Peer = from.GetPeer()
 	m.TopMessage = from.GetTopMessage()
 	m.ReadInboxMaxID = from.GetReadInboxMaxID()
@@ -396,6 +420,11 @@ func (m *MonoForumDialog) TypeInfo() tdp.Type {
 			Null:       !m.Flags.Has(3),
 		},
 		{
+			Name:       "NopaidMessagesException",
+			SchemaName: "nopaid_messages_exception",
+			Null:       !m.Flags.Has(4),
+		},
+		{
 			Name:       "Peer",
 			SchemaName: "peer",
 		},
@@ -432,6 +461,9 @@ func (m *MonoForumDialog) TypeInfo() tdp.Type {
 func (m *MonoForumDialog) SetFlags() {
 	if !(m.UnreadMark == false) {
 		m.Flags.Set(3)
+	}
+	if !(m.NopaidMessagesException == false) {
+		m.Flags.Set(4)
 	}
 	if !(m.Draft == nil) {
 		m.Flags.Set(1)
@@ -500,6 +532,7 @@ func (m *MonoForumDialog) DecodeBare(b *bin.Buffer) error {
 		}
 	}
 	m.UnreadMark = m.Flags.Has(3)
+	m.NopaidMessagesException = m.Flags.Has(4)
 	{
 		value, err := DecodePeer(b)
 		if err != nil {
@@ -569,6 +602,25 @@ func (m *MonoForumDialog) GetUnreadMark() (value bool) {
 		return
 	}
 	return m.Flags.Has(3)
+}
+
+// SetNopaidMessagesException sets value of NopaidMessagesException conditional field.
+func (m *MonoForumDialog) SetNopaidMessagesException(value bool) {
+	if value {
+		m.Flags.Set(4)
+		m.NopaidMessagesException = true
+	} else {
+		m.Flags.Unset(4)
+		m.NopaidMessagesException = false
+	}
+}
+
+// GetNopaidMessagesException returns value of NopaidMessagesException conditional field.
+func (m *MonoForumDialog) GetNopaidMessagesException() (value bool) {
+	if m == nil {
+		return
+	}
+	return m.Flags.Has(4)
 }
 
 // GetPeer returns value of Peer field.

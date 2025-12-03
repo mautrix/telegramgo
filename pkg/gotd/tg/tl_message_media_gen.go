@@ -912,11 +912,11 @@ type MessageMediaDocument struct {
 	//
 	// Use SetAltDocuments and GetAltDocuments helpers.
 	AltDocuments []DocumentClass
-	// VideoCover field of MessageMediaDocument.
+	// Custom video cover.
 	//
 	// Use SetVideoCover and GetVideoCover helpers.
 	VideoCover PhotoClass
-	// VideoTimestamp field of MessageMediaDocument.
+	// Start playing the video at the specified timestamp (seconds).
 	//
 	// Use SetVideoTimestamp and GetVideoTimestamp helpers.
 	VideoTimestamp int
@@ -4891,6 +4891,420 @@ func (m *MessageMediaPaidMedia) MapExtendedMedia() (value MessageExtendedMediaCl
 	return MessageExtendedMediaClassArray(m.ExtendedMedia)
 }
 
+// MessageMediaToDo represents TL type `messageMediaToDo#8a53b014`.
+// Represents a todo list »¹.
+//
+// Links:
+//  1. https://core.telegram.org/api/todo
+//
+// See https://core.telegram.org/constructor/messageMediaToDo for reference.
+type MessageMediaToDo struct {
+	// Flags, see TL conditional fields¹
+	//
+	// Links:
+	//  1) https://core.telegram.org/mtproto/TL-combinators#conditional-fields
+	Flags bin.Fields
+	// The todo list.
+	Todo TodoList
+	// Completed items.
+	//
+	// Use SetCompletions and GetCompletions helpers.
+	Completions []TodoCompletion
+}
+
+// MessageMediaToDoTypeID is TL type id of MessageMediaToDo.
+const MessageMediaToDoTypeID = 0x8a53b014
+
+// construct implements constructor of MessageMediaClass.
+func (m MessageMediaToDo) construct() MessageMediaClass { return &m }
+
+// Ensuring interfaces in compile-time for MessageMediaToDo.
+var (
+	_ bin.Encoder     = &MessageMediaToDo{}
+	_ bin.Decoder     = &MessageMediaToDo{}
+	_ bin.BareEncoder = &MessageMediaToDo{}
+	_ bin.BareDecoder = &MessageMediaToDo{}
+
+	_ MessageMediaClass = &MessageMediaToDo{}
+)
+
+func (m *MessageMediaToDo) Zero() bool {
+	if m == nil {
+		return true
+	}
+	if !(m.Flags.Zero()) {
+		return false
+	}
+	if !(m.Todo.Zero()) {
+		return false
+	}
+	if !(m.Completions == nil) {
+		return false
+	}
+
+	return true
+}
+
+// String implements fmt.Stringer.
+func (m *MessageMediaToDo) String() string {
+	if m == nil {
+		return "MessageMediaToDo(nil)"
+	}
+	type Alias MessageMediaToDo
+	return fmt.Sprintf("MessageMediaToDo%+v", Alias(*m))
+}
+
+// FillFrom fills MessageMediaToDo from given interface.
+func (m *MessageMediaToDo) FillFrom(from interface {
+	GetTodo() (value TodoList)
+	GetCompletions() (value []TodoCompletion, ok bool)
+}) {
+	m.Todo = from.GetTodo()
+	if val, ok := from.GetCompletions(); ok {
+		m.Completions = val
+	}
+
+}
+
+// TypeID returns type id in TL schema.
+//
+// See https://core.telegram.org/mtproto/TL-tl#remarks.
+func (*MessageMediaToDo) TypeID() uint32 {
+	return MessageMediaToDoTypeID
+}
+
+// TypeName returns name of type in TL schema.
+func (*MessageMediaToDo) TypeName() string {
+	return "messageMediaToDo"
+}
+
+// TypeInfo returns info about TL type.
+func (m *MessageMediaToDo) TypeInfo() tdp.Type {
+	typ := tdp.Type{
+		Name: "messageMediaToDo",
+		ID:   MessageMediaToDoTypeID,
+	}
+	if m == nil {
+		typ.Null = true
+		return typ
+	}
+	typ.Fields = []tdp.Field{
+		{
+			Name:       "Todo",
+			SchemaName: "todo",
+		},
+		{
+			Name:       "Completions",
+			SchemaName: "completions",
+			Null:       !m.Flags.Has(0),
+		},
+	}
+	return typ
+}
+
+// SetFlags sets flags for non-zero fields.
+func (m *MessageMediaToDo) SetFlags() {
+	if !(m.Completions == nil) {
+		m.Flags.Set(0)
+	}
+}
+
+// Encode implements bin.Encoder.
+func (m *MessageMediaToDo) Encode(b *bin.Buffer) error {
+	if m == nil {
+		return fmt.Errorf("can't encode messageMediaToDo#8a53b014 as nil")
+	}
+	b.PutID(MessageMediaToDoTypeID)
+	return m.EncodeBare(b)
+}
+
+// EncodeBare implements bin.BareEncoder.
+func (m *MessageMediaToDo) EncodeBare(b *bin.Buffer) error {
+	if m == nil {
+		return fmt.Errorf("can't encode messageMediaToDo#8a53b014 as nil")
+	}
+	m.SetFlags()
+	if err := m.Flags.Encode(b); err != nil {
+		return fmt.Errorf("unable to encode messageMediaToDo#8a53b014: field flags: %w", err)
+	}
+	if err := m.Todo.Encode(b); err != nil {
+		return fmt.Errorf("unable to encode messageMediaToDo#8a53b014: field todo: %w", err)
+	}
+	if m.Flags.Has(0) {
+		b.PutVectorHeader(len(m.Completions))
+		for idx, v := range m.Completions {
+			if err := v.Encode(b); err != nil {
+				return fmt.Errorf("unable to encode messageMediaToDo#8a53b014: field completions element with index %d: %w", idx, err)
+			}
+		}
+	}
+	return nil
+}
+
+// Decode implements bin.Decoder.
+func (m *MessageMediaToDo) Decode(b *bin.Buffer) error {
+	if m == nil {
+		return fmt.Errorf("can't decode messageMediaToDo#8a53b014 to nil")
+	}
+	if err := b.ConsumeID(MessageMediaToDoTypeID); err != nil {
+		return fmt.Errorf("unable to decode messageMediaToDo#8a53b014: %w", err)
+	}
+	return m.DecodeBare(b)
+}
+
+// DecodeBare implements bin.BareDecoder.
+func (m *MessageMediaToDo) DecodeBare(b *bin.Buffer) error {
+	if m == nil {
+		return fmt.Errorf("can't decode messageMediaToDo#8a53b014 to nil")
+	}
+	{
+		if err := m.Flags.Decode(b); err != nil {
+			return fmt.Errorf("unable to decode messageMediaToDo#8a53b014: field flags: %w", err)
+		}
+	}
+	{
+		if err := m.Todo.Decode(b); err != nil {
+			return fmt.Errorf("unable to decode messageMediaToDo#8a53b014: field todo: %w", err)
+		}
+	}
+	if m.Flags.Has(0) {
+		headerLen, err := b.VectorHeader()
+		if err != nil {
+			return fmt.Errorf("unable to decode messageMediaToDo#8a53b014: field completions: %w", err)
+		}
+
+		if headerLen > 0 {
+			m.Completions = make([]TodoCompletion, 0, headerLen%bin.PreallocateLimit)
+		}
+		for idx := 0; idx < headerLen; idx++ {
+			var value TodoCompletion
+			if err := value.Decode(b); err != nil {
+				return fmt.Errorf("unable to decode messageMediaToDo#8a53b014: field completions: %w", err)
+			}
+			m.Completions = append(m.Completions, value)
+		}
+	}
+	return nil
+}
+
+// GetTodo returns value of Todo field.
+func (m *MessageMediaToDo) GetTodo() (value TodoList) {
+	if m == nil {
+		return
+	}
+	return m.Todo
+}
+
+// SetCompletions sets value of Completions conditional field.
+func (m *MessageMediaToDo) SetCompletions(value []TodoCompletion) {
+	m.Flags.Set(0)
+	m.Completions = value
+}
+
+// GetCompletions returns value of Completions conditional field and
+// boolean which is true if field was set.
+func (m *MessageMediaToDo) GetCompletions() (value []TodoCompletion, ok bool) {
+	if m == nil {
+		return
+	}
+	if !m.Flags.Has(0) {
+		return value, false
+	}
+	return m.Completions, true
+}
+
+// MessageMediaVideoStream represents TL type `messageMediaVideoStream#ca5cab89`.
+//
+// See https://core.telegram.org/constructor/messageMediaVideoStream for reference.
+type MessageMediaVideoStream struct {
+	// Flags field of MessageMediaVideoStream.
+	Flags bin.Fields
+	// RtmpStream field of MessageMediaVideoStream.
+	RtmpStream bool
+	// Call field of MessageMediaVideoStream.
+	Call InputGroupCallClass
+}
+
+// MessageMediaVideoStreamTypeID is TL type id of MessageMediaVideoStream.
+const MessageMediaVideoStreamTypeID = 0xca5cab89
+
+// construct implements constructor of MessageMediaClass.
+func (m MessageMediaVideoStream) construct() MessageMediaClass { return &m }
+
+// Ensuring interfaces in compile-time for MessageMediaVideoStream.
+var (
+	_ bin.Encoder     = &MessageMediaVideoStream{}
+	_ bin.Decoder     = &MessageMediaVideoStream{}
+	_ bin.BareEncoder = &MessageMediaVideoStream{}
+	_ bin.BareDecoder = &MessageMediaVideoStream{}
+
+	_ MessageMediaClass = &MessageMediaVideoStream{}
+)
+
+func (m *MessageMediaVideoStream) Zero() bool {
+	if m == nil {
+		return true
+	}
+	if !(m.Flags.Zero()) {
+		return false
+	}
+	if !(m.RtmpStream == false) {
+		return false
+	}
+	if !(m.Call == nil) {
+		return false
+	}
+
+	return true
+}
+
+// String implements fmt.Stringer.
+func (m *MessageMediaVideoStream) String() string {
+	if m == nil {
+		return "MessageMediaVideoStream(nil)"
+	}
+	type Alias MessageMediaVideoStream
+	return fmt.Sprintf("MessageMediaVideoStream%+v", Alias(*m))
+}
+
+// FillFrom fills MessageMediaVideoStream from given interface.
+func (m *MessageMediaVideoStream) FillFrom(from interface {
+	GetRtmpStream() (value bool)
+	GetCall() (value InputGroupCallClass)
+}) {
+	m.RtmpStream = from.GetRtmpStream()
+	m.Call = from.GetCall()
+}
+
+// TypeID returns type id in TL schema.
+//
+// See https://core.telegram.org/mtproto/TL-tl#remarks.
+func (*MessageMediaVideoStream) TypeID() uint32 {
+	return MessageMediaVideoStreamTypeID
+}
+
+// TypeName returns name of type in TL schema.
+func (*MessageMediaVideoStream) TypeName() string {
+	return "messageMediaVideoStream"
+}
+
+// TypeInfo returns info about TL type.
+func (m *MessageMediaVideoStream) TypeInfo() tdp.Type {
+	typ := tdp.Type{
+		Name: "messageMediaVideoStream",
+		ID:   MessageMediaVideoStreamTypeID,
+	}
+	if m == nil {
+		typ.Null = true
+		return typ
+	}
+	typ.Fields = []tdp.Field{
+		{
+			Name:       "RtmpStream",
+			SchemaName: "rtmp_stream",
+			Null:       !m.Flags.Has(0),
+		},
+		{
+			Name:       "Call",
+			SchemaName: "call",
+		},
+	}
+	return typ
+}
+
+// SetFlags sets flags for non-zero fields.
+func (m *MessageMediaVideoStream) SetFlags() {
+	if !(m.RtmpStream == false) {
+		m.Flags.Set(0)
+	}
+}
+
+// Encode implements bin.Encoder.
+func (m *MessageMediaVideoStream) Encode(b *bin.Buffer) error {
+	if m == nil {
+		return fmt.Errorf("can't encode messageMediaVideoStream#ca5cab89 as nil")
+	}
+	b.PutID(MessageMediaVideoStreamTypeID)
+	return m.EncodeBare(b)
+}
+
+// EncodeBare implements bin.BareEncoder.
+func (m *MessageMediaVideoStream) EncodeBare(b *bin.Buffer) error {
+	if m == nil {
+		return fmt.Errorf("can't encode messageMediaVideoStream#ca5cab89 as nil")
+	}
+	m.SetFlags()
+	if err := m.Flags.Encode(b); err != nil {
+		return fmt.Errorf("unable to encode messageMediaVideoStream#ca5cab89: field flags: %w", err)
+	}
+	if m.Call == nil {
+		return fmt.Errorf("unable to encode messageMediaVideoStream#ca5cab89: field call is nil")
+	}
+	if err := m.Call.Encode(b); err != nil {
+		return fmt.Errorf("unable to encode messageMediaVideoStream#ca5cab89: field call: %w", err)
+	}
+	return nil
+}
+
+// Decode implements bin.Decoder.
+func (m *MessageMediaVideoStream) Decode(b *bin.Buffer) error {
+	if m == nil {
+		return fmt.Errorf("can't decode messageMediaVideoStream#ca5cab89 to nil")
+	}
+	if err := b.ConsumeID(MessageMediaVideoStreamTypeID); err != nil {
+		return fmt.Errorf("unable to decode messageMediaVideoStream#ca5cab89: %w", err)
+	}
+	return m.DecodeBare(b)
+}
+
+// DecodeBare implements bin.BareDecoder.
+func (m *MessageMediaVideoStream) DecodeBare(b *bin.Buffer) error {
+	if m == nil {
+		return fmt.Errorf("can't decode messageMediaVideoStream#ca5cab89 to nil")
+	}
+	{
+		if err := m.Flags.Decode(b); err != nil {
+			return fmt.Errorf("unable to decode messageMediaVideoStream#ca5cab89: field flags: %w", err)
+		}
+	}
+	m.RtmpStream = m.Flags.Has(0)
+	{
+		value, err := DecodeInputGroupCall(b)
+		if err != nil {
+			return fmt.Errorf("unable to decode messageMediaVideoStream#ca5cab89: field call: %w", err)
+		}
+		m.Call = value
+	}
+	return nil
+}
+
+// SetRtmpStream sets value of RtmpStream conditional field.
+func (m *MessageMediaVideoStream) SetRtmpStream(value bool) {
+	if value {
+		m.Flags.Set(0)
+		m.RtmpStream = true
+	} else {
+		m.Flags.Unset(0)
+		m.RtmpStream = false
+	}
+}
+
+// GetRtmpStream returns value of RtmpStream conditional field.
+func (m *MessageMediaVideoStream) GetRtmpStream() (value bool) {
+	if m == nil {
+		return
+	}
+	return m.Flags.Has(0)
+}
+
+// GetCall returns value of Call field.
+func (m *MessageMediaVideoStream) GetCall() (value InputGroupCallClass) {
+	if m == nil {
+		return
+	}
+	return m.Call
+}
+
 // MessageMediaClassName is schema name of MessageMediaClass.
 const MessageMediaClassName = "MessageMedia"
 
@@ -4922,6 +5336,8 @@ const MessageMediaClassName = "MessageMedia"
 //	case *tg.MessageMediaGiveaway: // messageMediaGiveaway#aa073beb
 //	case *tg.MessageMediaGiveawayResults: // messageMediaGiveawayResults#ceaa3ea1
 //	case *tg.MessageMediaPaidMedia: // messageMediaPaidMedia#a8852491
+//	case *tg.MessageMediaToDo: // messageMediaToDo#8a53b014
+//	case *tg.MessageMediaVideoStream: // messageMediaVideoStream#ca5cab89
 //	default: panic(v)
 //	}
 type MessageMediaClass interface {
@@ -5065,6 +5481,20 @@ func DecodeMessageMedia(buf *bin.Buffer) (MessageMediaClass, error) {
 	case MessageMediaPaidMediaTypeID:
 		// Decoding messageMediaPaidMedia#a8852491.
 		v := MessageMediaPaidMedia{}
+		if err := v.Decode(buf); err != nil {
+			return nil, fmt.Errorf("unable to decode MessageMediaClass: %w", err)
+		}
+		return &v, nil
+	case MessageMediaToDoTypeID:
+		// Decoding messageMediaToDo#8a53b014.
+		v := MessageMediaToDo{}
+		if err := v.Decode(buf); err != nil {
+			return nil, fmt.Errorf("unable to decode MessageMediaClass: %w", err)
+		}
+		return &v, nil
+	case MessageMediaVideoStreamTypeID:
+		// Decoding messageMediaVideoStream#ca5cab89.
+		v := MessageMediaVideoStream{}
 		if err := v.Decode(buf); err != nil {
 			return nil, fmt.Errorf("unable to decode MessageMediaClass: %w", err)
 		}

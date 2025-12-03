@@ -379,7 +379,10 @@ func (t *MessagesTranslateTextRequest) GetToLang() (value string) {
 //	400 MSG_ID_INVALID: Invalid message ID provided.
 //	400 PEER_ID_INVALID: The provided peer id is invalid.
 //	400 TO_LANG_INVALID: The specified destination language is invalid.
+//	500 TRANSLATE_REQ_FAILED: Translation failed, please try again later.
 //	400 TRANSLATE_REQ_QUOTA_EXCEEDED: Translation is currently unavailable due to a temporary server-side lack of resources.
+//	406 TRANSLATIONS_DISABLED: Translations are unavailable, a detailed and localized description for the error will be emitted via an updateServiceNotification as specified here ».
+//	500 TRANSLATION_TIMEOUT: A timeout occurred while translating the specified text.
 //
 // See https://core.telegram.org/method/messages.translateText for reference.
 func (c *Client) MessagesTranslateText(ctx context.Context, request *MessagesTranslateTextRequest) (*MessagesTranslateResult, error) {

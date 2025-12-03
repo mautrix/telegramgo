@@ -171,7 +171,6 @@ func (v *MessagesViewSponsoredMessageRequest) GetRandomID() (value []byte) {
 //  1. https://core.telegram.org/api/sponsored-messages
 //
 // See https://core.telegram.org/method/messages.viewSponsoredMessage for reference.
-// Can be used by bots.
 func (c *Client) MessagesViewSponsoredMessage(ctx context.Context, randomid []byte) (bool, error) {
 	var result BoolBox
 

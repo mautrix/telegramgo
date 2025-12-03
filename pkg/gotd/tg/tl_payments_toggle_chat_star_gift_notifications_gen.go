@@ -32,14 +32,30 @@ var (
 )
 
 // PaymentsToggleChatStarGiftNotificationsRequest represents TL type `payments.toggleChatStarGiftNotifications#60eaefa1`.
+// Enables or disables the reception of notifications every time a gift »¹ is received
+// by the specified channel, can only be invoked by admins with post_messages admin
+// rights².
+//
+// Links:
+//  1. https://core.telegram.org/api/gifts
+//  2. https://core.telegram.org/constructor/chatAdminRights
 //
 // See https://core.telegram.org/method/payments.toggleChatStarGiftNotifications for reference.
 type PaymentsToggleChatStarGiftNotificationsRequest struct {
-	// Flags field of PaymentsToggleChatStarGiftNotificationsRequest.
+	// Flags, see TL conditional fields¹
+	//
+	// Links:
+	//  1) https://core.telegram.org/mtproto/TL-combinators#conditional-fields
 	Flags bin.Fields
-	// Enabled field of PaymentsToggleChatStarGiftNotificationsRequest.
+	// Whether to enable or disable reception of notifications in the form of
+	// messageActionStarGiftUnique¹ and messageActionStarGift² service messages from the
+	// channel.
+	//
+	// Links:
+	//  1) https://core.telegram.org/constructor/messageActionStarGiftUnique
+	//  2) https://core.telegram.org/constructor/messageActionStarGift
 	Enabled bool
-	// Peer field of PaymentsToggleChatStarGiftNotificationsRequest.
+	// The channel for which to receive or not receive notifications.
 	Peer InputPeerClass
 }
 
@@ -219,6 +235,17 @@ func (t *PaymentsToggleChatStarGiftNotificationsRequest) GetPeer() (value InputP
 }
 
 // PaymentsToggleChatStarGiftNotifications invokes method payments.toggleChatStarGiftNotifications#60eaefa1 returning error if any.
+// Enables or disables the reception of notifications every time a gift »¹ is received
+// by the specified channel, can only be invoked by admins with post_messages admin
+// rights².
+//
+// Links:
+//  1. https://core.telegram.org/api/gifts
+//  2. https://core.telegram.org/constructor/chatAdminRights
+//
+// Possible errors:
+//
+//	400 PEER_ID_INVALID: The provided peer id is invalid.
 //
 // See https://core.telegram.org/method/payments.toggleChatStarGiftNotifications for reference.
 func (c *Client) PaymentsToggleChatStarGiftNotifications(ctx context.Context, request *PaymentsToggleChatStarGiftNotificationsRequest) (bool, error) {

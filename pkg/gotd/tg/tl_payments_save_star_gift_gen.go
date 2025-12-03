@@ -46,7 +46,7 @@ type PaymentsSaveStarGiftRequest struct {
 	Flags bin.Fields
 	// If set, hides the gift from our profile.
 	Unsave bool
-	// Stargift field of PaymentsSaveStarGiftRequest.
+	// The gift to display or remove.
 	Stargift InputSavedStarGiftClass
 }
 
@@ -231,8 +231,14 @@ func (s *PaymentsSaveStarGiftRequest) GetStargift() (value InputSavedStarGiftCla
 // Links:
 //  1. https://core.telegram.org/api/gifts
 //
+// Possible errors:
+//
+//	400 MESSAGE_ID_INVALID: The provided message id is invalid.
+//	400 SAVED_ID_EMPTY: The passed inputSavedStarGiftChat.saved_id is empty.
+//	400 STARGIFT_OWNER_INVALID: You cannot transfer or sell a gift owned by another user.
+//	400 USER_ID_INVALID: The provided user ID is invalid.
+//
 // See https://core.telegram.org/method/payments.saveStarGift for reference.
-// Can be used by bots.
 func (c *Client) PaymentsSaveStarGift(ctx context.Context, request *PaymentsSaveStarGiftRequest) (bool, error) {
 	var result BoolBox
 

@@ -1176,26 +1176,6 @@ func (u UpdateDispatcher) OnMessageExtendedMedia(handler MessageExtendedMediaHan
 	}
 }
 
-// ChannelPinnedTopicHandler is a ChannelPinnedTopic event handler.
-type ChannelPinnedTopicHandler func(ctx context.Context, e Entities, update *UpdateChannelPinnedTopic) error
-
-// OnChannelPinnedTopic sets ChannelPinnedTopic handler.
-func (u UpdateDispatcher) OnChannelPinnedTopic(handler ChannelPinnedTopicHandler) {
-	u.handlers[UpdateChannelPinnedTopicTypeID] = func(ctx context.Context, e Entities, update UpdateClass) error {
-		return handler(ctx, e, update.(*UpdateChannelPinnedTopic))
-	}
-}
-
-// ChannelPinnedTopicsHandler is a ChannelPinnedTopics event handler.
-type ChannelPinnedTopicsHandler func(ctx context.Context, e Entities, update *UpdateChannelPinnedTopics) error
-
-// OnChannelPinnedTopics sets ChannelPinnedTopics handler.
-func (u UpdateDispatcher) OnChannelPinnedTopics(handler ChannelPinnedTopicsHandler) {
-	u.handlers[UpdateChannelPinnedTopicsTypeID] = func(ctx context.Context, e Entities, update UpdateClass) error {
-		return handler(ctx, e, update.(*UpdateChannelPinnedTopics))
-	}
-}
-
 // UserHandler is a User event handler.
 type UserHandler func(ctx context.Context, e Entities, update *UpdateUser) error
 
@@ -1456,16 +1436,6 @@ func (u UpdateDispatcher) OnNewStoryReaction(handler NewStoryReactionHandler) {
 	}
 }
 
-// BroadcastRevenueTransactionsHandler is a BroadcastRevenueTransactions event handler.
-type BroadcastRevenueTransactionsHandler func(ctx context.Context, e Entities, update *UpdateBroadcastRevenueTransactions) error
-
-// OnBroadcastRevenueTransactions sets BroadcastRevenueTransactions handler.
-func (u UpdateDispatcher) OnBroadcastRevenueTransactions(handler BroadcastRevenueTransactionsHandler) {
-	u.handlers[UpdateBroadcastRevenueTransactionsTypeID] = func(ctx context.Context, e Entities, update UpdateClass) error {
-		return handler(ctx, e, update.(*UpdateBroadcastRevenueTransactions))
-	}
-}
-
 // StarsBalanceHandler is a StarsBalance event handler.
 type StarsBalanceHandler func(ctx context.Context, e Entities, update *UpdateStarsBalance) error
 
@@ -1553,5 +1523,85 @@ type ReadMonoForumOutboxHandler func(ctx context.Context, e Entities, update *Up
 func (u UpdateDispatcher) OnReadMonoForumOutbox(handler ReadMonoForumOutboxHandler) {
 	u.handlers[UpdateReadMonoForumOutboxTypeID] = func(ctx context.Context, e Entities, update UpdateClass) error {
 		return handler(ctx, e, update.(*UpdateReadMonoForumOutbox))
+	}
+}
+
+// MonoForumNoPaidExceptionHandler is a MonoForumNoPaidException event handler.
+type MonoForumNoPaidExceptionHandler func(ctx context.Context, e Entities, update *UpdateMonoForumNoPaidException) error
+
+// OnMonoForumNoPaidException sets MonoForumNoPaidException handler.
+func (u UpdateDispatcher) OnMonoForumNoPaidException(handler MonoForumNoPaidExceptionHandler) {
+	u.handlers[UpdateMonoForumNoPaidExceptionTypeID] = func(ctx context.Context, e Entities, update UpdateClass) error {
+		return handler(ctx, e, update.(*UpdateMonoForumNoPaidException))
+	}
+}
+
+// GroupCallMessageHandler is a GroupCallMessage event handler.
+type GroupCallMessageHandler func(ctx context.Context, e Entities, update *UpdateGroupCallMessage) error
+
+// OnGroupCallMessage sets GroupCallMessage handler.
+func (u UpdateDispatcher) OnGroupCallMessage(handler GroupCallMessageHandler) {
+	u.handlers[UpdateGroupCallMessageTypeID] = func(ctx context.Context, e Entities, update UpdateClass) error {
+		return handler(ctx, e, update.(*UpdateGroupCallMessage))
+	}
+}
+
+// GroupCallEncryptedMessageHandler is a GroupCallEncryptedMessage event handler.
+type GroupCallEncryptedMessageHandler func(ctx context.Context, e Entities, update *UpdateGroupCallEncryptedMessage) error
+
+// OnGroupCallEncryptedMessage sets GroupCallEncryptedMessage handler.
+func (u UpdateDispatcher) OnGroupCallEncryptedMessage(handler GroupCallEncryptedMessageHandler) {
+	u.handlers[UpdateGroupCallEncryptedMessageTypeID] = func(ctx context.Context, e Entities, update UpdateClass) error {
+		return handler(ctx, e, update.(*UpdateGroupCallEncryptedMessage))
+	}
+}
+
+// PinnedForumTopicHandler is a PinnedForumTopic event handler.
+type PinnedForumTopicHandler func(ctx context.Context, e Entities, update *UpdatePinnedForumTopic) error
+
+// OnPinnedForumTopic sets PinnedForumTopic handler.
+func (u UpdateDispatcher) OnPinnedForumTopic(handler PinnedForumTopicHandler) {
+	u.handlers[UpdatePinnedForumTopicTypeID] = func(ctx context.Context, e Entities, update UpdateClass) error {
+		return handler(ctx, e, update.(*UpdatePinnedForumTopic))
+	}
+}
+
+// PinnedForumTopicsHandler is a PinnedForumTopics event handler.
+type PinnedForumTopicsHandler func(ctx context.Context, e Entities, update *UpdatePinnedForumTopics) error
+
+// OnPinnedForumTopics sets PinnedForumTopics handler.
+func (u UpdateDispatcher) OnPinnedForumTopics(handler PinnedForumTopicsHandler) {
+	u.handlers[UpdatePinnedForumTopicsTypeID] = func(ctx context.Context, e Entities, update UpdateClass) error {
+		return handler(ctx, e, update.(*UpdatePinnedForumTopics))
+	}
+}
+
+// DeleteGroupCallMessagesHandler is a DeleteGroupCallMessages event handler.
+type DeleteGroupCallMessagesHandler func(ctx context.Context, e Entities, update *UpdateDeleteGroupCallMessages) error
+
+// OnDeleteGroupCallMessages sets DeleteGroupCallMessages handler.
+func (u UpdateDispatcher) OnDeleteGroupCallMessages(handler DeleteGroupCallMessagesHandler) {
+	u.handlers[UpdateDeleteGroupCallMessagesTypeID] = func(ctx context.Context, e Entities, update UpdateClass) error {
+		return handler(ctx, e, update.(*UpdateDeleteGroupCallMessages))
+	}
+}
+
+// StarGiftAuctionStateHandler is a StarGiftAuctionState event handler.
+type StarGiftAuctionStateHandler func(ctx context.Context, e Entities, update *UpdateStarGiftAuctionState) error
+
+// OnStarGiftAuctionState sets StarGiftAuctionState handler.
+func (u UpdateDispatcher) OnStarGiftAuctionState(handler StarGiftAuctionStateHandler) {
+	u.handlers[UpdateStarGiftAuctionStateTypeID] = func(ctx context.Context, e Entities, update UpdateClass) error {
+		return handler(ctx, e, update.(*UpdateStarGiftAuctionState))
+	}
+}
+
+// StarGiftAuctionUserStateHandler is a StarGiftAuctionUserState event handler.
+type StarGiftAuctionUserStateHandler func(ctx context.Context, e Entities, update *UpdateStarGiftAuctionUserState) error
+
+// OnStarGiftAuctionUserState sets StarGiftAuctionUserState handler.
+func (u UpdateDispatcher) OnStarGiftAuctionUserState(handler StarGiftAuctionUserStateHandler) {
+	u.handlers[UpdateStarGiftAuctionUserStateTypeID] = func(ctx context.Context, e Entities, update UpdateClass) error {
+		return handler(ctx, e, update.(*UpdateStarGiftAuctionUserState))
 	}
 }

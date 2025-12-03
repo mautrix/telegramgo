@@ -740,7 +740,13 @@ func (p *PrivacyValueDisallowUsers) GetUsers() (value []int64) {
 //
 // See https://core.telegram.org/constructor/privacyValueAllowChatParticipants for reference.
 type PrivacyValueAllowChatParticipants struct {
-	// Allowed chats
+	// Allowed chat IDs (either a chat¹ or a supergroup² ID, verbatim the way it is
+	// received in the constructor (i.e. unlike with bot API IDs, here group and supergroup
+	// IDs should be treated in the same way)).
+	//
+	// Links:
+	//  1) https://core.telegram.org/constructor/chat
+	//  2) https://core.telegram.org/constructor/channel
 	Chats []int64
 }
 
@@ -888,7 +894,13 @@ func (p *PrivacyValueAllowChatParticipants) GetChats() (value []int64) {
 //
 // See https://core.telegram.org/constructor/privacyValueDisallowChatParticipants for reference.
 type PrivacyValueDisallowChatParticipants struct {
-	// Disallowed chats
+	// Disallowed chats IDs (either a chat¹ or a supergroup² ID, verbatim the way it is
+	// received in the constructor (i.e. unlike with bot API IDs, here group and supergroup
+	// IDs should be treated in the same way)).
+	//
+	// Links:
+	//  1) https://core.telegram.org/constructor/chat
+	//  2) https://core.telegram.org/constructor/channel
 	Chats []int64
 }
 
@@ -1244,6 +1256,7 @@ func (p *PrivacyValueAllowPremium) DecodeBare(b *bin.Buffer) error {
 }
 
 // PrivacyValueAllowBots represents TL type `privacyValueAllowBots#21461b5d`.
+// Allow bots and mini apps
 //
 // See https://core.telegram.org/constructor/privacyValueAllowBots for reference.
 type PrivacyValueAllowBots struct {
@@ -1345,6 +1358,7 @@ func (p *PrivacyValueAllowBots) DecodeBare(b *bin.Buffer) error {
 }
 
 // PrivacyValueDisallowBots represents TL type `privacyValueDisallowBots#f6a5f82f`.
+// Disallow bots and mini apps
 //
 // See https://core.telegram.org/constructor/privacyValueDisallowBots for reference.
 type PrivacyValueDisallowBots struct {

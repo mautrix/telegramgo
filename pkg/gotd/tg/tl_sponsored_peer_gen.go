@@ -32,20 +32,34 @@ var (
 )
 
 // SponsoredPeer represents TL type `sponsoredPeer#c69708d3`.
+// A sponsored peer.
 //
 // See https://core.telegram.org/constructor/sponsoredPeer for reference.
 type SponsoredPeer struct {
-	// Flags field of SponsoredPeer.
+	// Flags, see TL conditional fields¹
+	//
+	// Links:
+	//  1) https://core.telegram.org/mtproto/TL-combinators#conditional-fields
 	Flags bin.Fields
-	// RandomID field of SponsoredPeer.
+	// ID of the sponsored peer, to be passed to messages.viewSponsoredMessage¹, messages
+	// clickSponsoredMessage² or messages.reportSponsoredMessage³ (the same methods used
+	// for sponsored messages &raquo⁴).
+	//
+	// Links:
+	//  1) https://core.telegram.org/method/messages.viewSponsoredMessage
+	//  2) https://core.telegram.org/method/messages.clickSponsoredMessage
+	//  3) https://core.telegram.org/method/messages.reportSponsoredMessage
+	//  4) https://core.telegram.org/api/sponsored-messages
 	RandomID []byte
-	// Peer field of SponsoredPeer.
+	// The sponsored peer.
 	Peer PeerClass
-	// SponsorInfo field of SponsoredPeer.
+	// If set, contains additional information about the sponsor to be shown along with the
+	// peer.
 	//
 	// Use SetSponsorInfo and GetSponsorInfo helpers.
 	SponsorInfo string
-	// AdditionalInfo field of SponsoredPeer.
+	// If set, contains additional information about the sponsored message to be shown along
+	// with the peer.
 	//
 	// Use SetAdditionalInfo and GetAdditionalInfo helpers.
 	AdditionalInfo string

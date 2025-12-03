@@ -46,7 +46,7 @@ type PaymentsStarsStatus struct {
 	//  1) https://core.telegram.org/mtproto/TL-combinators#conditional-fields
 	Flags bin.Fields
 	// Current Telegram Star balance.
-	Balance StarsAmount
+	Balance StarsAmountClass
 	// Info about current Telegram Star subscriptions, only returned when invoking payments
 	// getStarsTransactions¹ and payments.getStarsSubscriptions².
 	//
@@ -56,14 +56,11 @@ type PaymentsStarsStatus struct {
 	//
 	// Use SetSubscriptions and GetSubscriptions helpers.
 	Subscriptions []StarsSubscription
-	// Offset for pagination of subscriptions: only usable with payments
-	// getStarsSubscriptions¹, returned when invoking payments.getStarsTransactions² and
-	// payments.getStarsSubscriptions³.
+	// Offset for pagination of subscriptions: only usable and returned when invoking
+	// payments.getStarsSubscriptions¹.
 	//
 	// Links:
 	//  1) https://core.telegram.org/method/payments.getStarsSubscriptions
-	//  2) https://core.telegram.org/method/payments.getStarsTransactions
-	//  3) https://core.telegram.org/method/payments.getStarsSubscriptions
 	//
 	// Use SetSubscriptionsNextOffset and GetSubscriptionsNextOffset helpers.
 	SubscriptionsNextOffset string
@@ -109,7 +106,7 @@ func (s *PaymentsStarsStatus) Zero() bool {
 	if !(s.Flags.Zero()) {
 		return false
 	}
-	if !(s.Balance.Zero()) {
+	if !(s.Balance == nil) {
 		return false
 	}
 	if !(s.Subscriptions == nil) {
@@ -148,7 +145,7 @@ func (s *PaymentsStarsStatus) String() string {
 
 // FillFrom fills PaymentsStarsStatus from given interface.
 func (s *PaymentsStarsStatus) FillFrom(from interface {
-	GetBalance() (value StarsAmount)
+	GetBalance() (value StarsAmountClass)
 	GetSubscriptions() (value []StarsSubscription, ok bool)
 	GetSubscriptionsNextOffset() (value string, ok bool)
 	GetSubscriptionsMissingBalance() (value int64, ok bool)
@@ -283,6 +280,9 @@ func (s *PaymentsStarsStatus) EncodeBare(b *bin.Buffer) error {
 	if err := s.Flags.Encode(b); err != nil {
 		return fmt.Errorf("unable to encode payments.starsStatus#6c9ce8ed: field flags: %w", err)
 	}
+	if s.Balance == nil {
+		return fmt.Errorf("unable to encode payments.starsStatus#6c9ce8ed: field balance is nil")
+	}
 	if err := s.Balance.Encode(b); err != nil {
 		return fmt.Errorf("unable to encode payments.starsStatus#6c9ce8ed: field balance: %w", err)
 	}
@@ -354,9 +354,11 @@ func (s *PaymentsStarsStatus) DecodeBare(b *bin.Buffer) error {
 		}
 	}
 	{
-		if err := s.Balance.Decode(b); err != nil {
+		value, err := DecodeStarsAmount(b)
+		if err != nil {
 			return fmt.Errorf("unable to decode payments.starsStatus#6c9ce8ed: field balance: %w", err)
 		}
+		s.Balance = value
 	}
 	if s.Flags.Has(1) {
 		headerLen, err := b.VectorHeader()
@@ -451,7 +453,7 @@ func (s *PaymentsStarsStatus) DecodeBare(b *bin.Buffer) error {
 }
 
 // GetBalance returns value of Balance field.
-func (s *PaymentsStarsStatus) GetBalance() (value StarsAmount) {
+func (s *PaymentsStarsStatus) GetBalance() (value StarsAmountClass) {
 	if s == nil {
 		return
 	}

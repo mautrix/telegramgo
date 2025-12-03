@@ -85,6 +85,7 @@ func (q *QRLogin) Start(ctx context.Context) (*bridgev2.LoginStep, error) {
 		CustomSessionStorage: &q.authData,
 		UpdateHandler:        updateManager,
 		Logger:               zaplog,
+		Device:               q.main.deviceConfig(),
 	})
 
 	q.authClientCtx, q.authClientCancel = context.WithTimeoutCause(log.WithContext(context.Background()), time.Hour, errors.New("phone login took over one hour"))

@@ -138,6 +138,16 @@ func (u UpdateDispatcher) Handle(ctx context.Context, updates tg.UpdatesClass) e
 
 var messageLinkRegex = regexp.MustCompile(`^https?://t(?:elegram)?\.(?:me|dog)/([A-Za-z][A-Za-z0-9_]{3,31}[A-Za-z0-9]|[Cc]/[0-9]{1,20})/([0-9]{1,20})$`)
 
+func (tg *TelegramConnector) deviceConfig() telegram.DeviceConfig {
+	return telegram.DeviceConfig{
+		DeviceModel:    tg.Config.DeviceInfo.DeviceModel,
+		SystemVersion:  tg.Config.DeviceInfo.SystemVersion,
+		AppVersion:     tg.Config.DeviceInfo.AppVersion,
+		SystemLangCode: tg.Config.DeviceInfo.SystemLangCode,
+		LangCode:       tg.Config.DeviceInfo.LangCode,
+	}
+}
+
 func NewTelegramClient(ctx context.Context, tc *TelegramConnector, login *bridgev2.UserLogin) (*TelegramClient, error) {
 	telegramUserID, err := ids.ParseUserLoginID(login.ID)
 	if err != nil {
@@ -265,13 +275,7 @@ func NewTelegramClient(ctx context.Context, tc *TelegramConnector, login *bridge
 		OnAuthError:          client.onAuthError,
 		PingTimeout:          time.Duration(tc.Config.Ping.TimeoutSeconds) * time.Second,
 		PingInterval:         time.Duration(tc.Config.Ping.IntervalSeconds) * time.Second,
-		Device: telegram.DeviceConfig{
-			DeviceModel:    tc.Config.DeviceInfo.DeviceModel,
-			SystemVersion:  tc.Config.DeviceInfo.SystemVersion,
-			AppVersion:     tc.Config.DeviceInfo.AppVersion,
-			SystemLangCode: tc.Config.DeviceInfo.SystemLangCode,
-			LangCode:       tc.Config.DeviceInfo.LangCode,
-		},
+		Device:               tc.deviceConfig(),
 	})
 
 	client.telegramFmtParams = &telegramfmt.FormatParams{

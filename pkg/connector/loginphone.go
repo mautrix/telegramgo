@@ -85,6 +85,7 @@ func (p *PhoneLogin) SubmitUserInput(ctx context.Context, input map[string]strin
 		p.authClient = telegram.NewClient(p.main.Config.APIID, p.main.Config.APIHash, telegram.Options{
 			CustomSessionStorage: &p.authData,
 			Logger:               zap.New(zerozap.New(zerolog.Ctx(ctx).With().Str("component", "telegram_phone_login_client").Logger())),
+			Device:               p.main.deviceConfig(),
 		})
 
 		p.authClientCtx, p.authClientCancel = context.WithTimeoutCause(log.WithContext(context.Background()), time.Hour, errors.New("phone login took over one hour"))

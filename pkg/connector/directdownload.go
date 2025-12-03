@@ -191,10 +191,10 @@ func (tc *TelegramConnector) Download(ctx context.Context, mediaID networkid.Med
 		chatFull, ok := fullChat.FullChat.(*tg.ChatFull)
 		if !ok {
 			return nil, fmt.Errorf("full chat is %T not *tg.ChatFull", fullChat.FullChat)
-		}
-
-		// FIXME: this is basically a not found error
-		if photoID := chatFull.ChatPhoto.GetID(); photoID != info.ID {
+		} else if chatFull.ChatPhoto == nil {
+			// FIXME: these 2 are basically not found errors
+			return nil, fmt.Errorf("photo not found on chat")
+		} else if photoID := chatFull.ChatPhoto.GetID(); photoID != info.ID {
 			return nil, fmt.Errorf("photo id mismatch: %d != %d", photoID, info.ID)
 		}
 

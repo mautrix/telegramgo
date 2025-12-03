@@ -400,8 +400,12 @@ func (c *TelegramClient) convertMediaRequiringUpload(ctx context.Context, portal
 		} else {
 			content.Body = "image"
 		}
-		telegramMediaID = msgMedia.Photo.GetID()
-		mediaTransferer = transferer.WithPhoto(msgMedia.Photo)
+		photo, ok := msgMedia.Photo.(*tg.Photo)
+		if !ok {
+			return nil, nil, fmt.Errorf("unrecognized photo type %T", msgMedia.Photo)
+		}
+		telegramMediaID = photo.GetID()
+		mediaTransferer = transferer.WithPhoto(photo)
 	case *tg.MessageMediaDocument:
 		document, ok := msgMedia.Document.(*tg.Document)
 		if !ok {

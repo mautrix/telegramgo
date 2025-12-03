@@ -27,10 +27,16 @@ import (
 )
 
 func MakeUserID(userID int64) networkid.UserID {
+	if userID == 0 {
+		return ""
+	}
 	return networkid.UserID(strconv.FormatInt(userID, 10))
 }
 
 func MakeChannelUserID(channelID int64) networkid.UserID {
+	if channelID == 0 {
+		return ""
+	}
 	return networkid.UserID("channel-" + strconv.FormatInt(channelID, 10))
 }
 
@@ -50,6 +56,9 @@ func ParseUserLoginID(userID networkid.UserLoginID) (int64, error) {
 }
 
 func MakeUserLoginID(userID int64) networkid.UserLoginID {
+	if userID == 0 {
+		return ""
+	}
 	return networkid.UserLoginID(strconv.FormatInt(userID, 10))
 }
 

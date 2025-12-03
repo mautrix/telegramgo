@@ -212,25 +212,29 @@ func (t *Transferer) WithUserPhoto(ctx context.Context, store *store.ScopedStore
 	if accessHash, err := store.GetAccessHash(ctx, ids.PeerTypeUser, userID); err != nil {
 		return nil, fmt.Errorf("failed to get user access hash for %d: %w", userID, err)
 	} else {
-		return &ReadyTransferer{
-			inner: t,
-			loc: &tg.InputPeerPhotoFileLocation{
-				Peer:    &tg.InputPeerUser{UserID: userID, AccessHash: accessHash},
-				PhotoID: photoID,
-				Big:     true,
-			},
-		}, nil
+		return t.WithPeerPhoto(&tg.InputPeerUser{UserID: userID, AccessHash: accessHash}, photoID), nil
 	}
 }
 
 // WithChannelPhoto transforms a [Transferer] to a [ReadyTransferer] by setting
-// the given chat photo as the location that will be downloaded by the
+// the given channel's photo as the location that will be downloaded by the
 // [ReadyTransferer].
-func (t *Transferer) WithChannelPhoto(channelID, accessHash, photoID int64) *ReadyTransferer {
+func (t *Transferer) WithChannelPhoto(ctx context.Context, store *store.ScopedStore, channelID int64, photoID int64) (*ReadyTransferer, error) {
+	if accessHash, err := store.GetAccessHash(ctx, ids.PeerTypeChannel, channelID); err != nil {
+		return nil, fmt.Errorf("failed to get channel access hash for %d: %w", channelID, err)
+	} else {
+		return t.WithPeerPhoto(&tg.InputPeerChannel{ChannelID: channelID, AccessHash: accessHash}, photoID), nil
+	}
+}
+
+// WithPeerPhoto transforms a [Transferer] to a [ReadyTransferer] by setting
+// the given user, chat or channel photo as the location that will be downloaded by the
+// [ReadyTransferer].
+func (t *Transferer) WithPeerPhoto(peer tg.InputPeerClass, photoID int64) *ReadyTransferer {
 	return &ReadyTransferer{
 		inner: t,
 		loc: &tg.InputPeerPhotoFileLocation{
-			Peer:    &tg.InputPeerChannel{ChannelID: channelID, AccessHash: accessHash},
+			Peer:    peer,
 			PhotoID: photoID,
 			Big:     true,
 		},

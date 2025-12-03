@@ -809,15 +809,39 @@ func (c *TelegramClient) convertUserProfilePhoto(ctx context.Context, userID int
 	return avatar, nil
 }
 
-func (c *TelegramClient) convertChatPhoto(ctx context.Context, channelID, accessHash int64, chatPhoto *tg.ChatPhoto) (*bridgev2.Avatar, error) {
+func (c *TelegramClient) convertChatPhoto(chat tg.InputPeerClass, rawChatPhoto tg.ChatPhotoClass) (*bridgev2.Avatar, error) {
+	var chatPhoto *tg.ChatPhoto
+	switch typedChatPhoto := rawChatPhoto.(type) {
+	case *tg.ChatPhotoEmpty:
+		return &bridgev2.Avatar{Remove: true}, nil
+	case *tg.ChatPhoto:
+		chatPhoto = typedChatPhoto
+	default:
+		return nil, fmt.Errorf("not a chat photo: %T", rawChatPhoto)
+	}
 	avatar := &bridgev2.Avatar{
 		ID: ids.MakeAvatarID(chatPhoto.PhotoID),
 	}
 
 	if c.main.useDirectMedia {
+		var peerID int64
+		var peerType ids.PeerType
+		switch typedChat := chat.(type) {
+		case *tg.InputPeerChannel:
+			peerID = typedChat.ChannelID
+			peerType = ids.PeerTypeChannel
+		case *tg.InputPeerChat:
+			peerID = typedChat.ChatID
+			peerType = ids.PeerTypeChat
+		case *tg.InputPeerUser:
+			peerID = typedChat.UserID
+			peerType = ids.PeerTypeUser
+		default:
+			return nil, fmt.Errorf("unsupported chat type for chat photo: %T", chat)
+		}
 		mediaID, err := ids.DirectMediaInfo{
-			PeerType: ids.PeerTypeChannel,
-			PeerID:   channelID,
+			PeerType: peerType,
+			PeerID:   peerID,
 			UserID:   c.telegramUserID,
 			ID:       chatPhoto.PhotoID,
 		}.AsMediaID()
@@ -825,13 +849,14 @@ func (c *TelegramClient) convertChatPhoto(ctx context.Context, channelID, access
 			return nil, err
 		}
 
-		if avatar.MXC, err = c.main.Bridge.Matrix.GenerateContentURI(ctx, mediaID); err != nil {
+		todoRemove := c.main.Bridge.BackgroundCtx // TODO remove context parameter from GenerateContentURI
+		if avatar.MXC, err = c.main.Bridge.Matrix.GenerateContentURI(todoRemove, mediaID); err != nil {
 			return nil, err
 		}
 		avatar.Hash = ids.HashMediaID(mediaID)
 	} else {
 		avatar.Get = func(ctx context.Context) (data []byte, err error) {
-			return media.NewTransferer(c.client.API()).WithChannelPhoto(channelID, accessHash, chatPhoto.PhotoID).DownloadBytes(ctx)
+			return media.NewTransferer(c.client.API()).WithPeerPhoto(chat, chatPhoto.PhotoID).DownloadBytes(ctx)
 		}
 	}
 

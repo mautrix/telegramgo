@@ -798,6 +798,8 @@ func (t *TelegramClient) updateChannel(ctx context.Context, channel *tg.Channel)
 		}
 	}
 
+	// TODO resync portal metadata?
+
 	if !channel.Broadcast {
 		return nil, nil
 	}
@@ -810,7 +812,7 @@ func (t *TelegramClient) updateChannel(ctx context.Context, channel *tg.Channel)
 
 	var avatar *bridgev2.Avatar
 	if photo, ok := channel.GetPhoto().(*tg.ChatPhoto); ok {
-		avatar, err = t.convertChatPhoto(ctx, channel.ID, channel.AccessHash, photo)
+		avatar, err = t.convertChatPhoto(channel.AsInputPeer(), photo)
 		if err != nil {
 			return nil, err
 		}
@@ -864,7 +866,10 @@ func (t *TelegramClient) onMessageEdit(ctx context.Context, update IGetMessage) 
 		return nil
 	}
 
-	t.handleTelegramReactions(ctx, msg)
+	err := t.handleTelegramReactions(ctx, msg)
+	if err != nil {
+		zerolog.Ctx(ctx).Err(err).Msg("Failed to handle reactions on edited message")
+	}
 
 	portalKey := t.makePortalKeyFromPeer(msg.PeerID)
 	portal, err := t.main.Bridge.GetPortalByKey(ctx, portalKey)

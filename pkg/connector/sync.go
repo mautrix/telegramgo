@@ -20,15 +20,12 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"time"
 
 	"github.com/rs/zerolog"
-	"go.mau.fi/util/ptr"
 	"maunium.net/go/mautrix/bridgev2"
 	"maunium.net/go/mautrix/bridgev2/database"
 	"maunium.net/go/mautrix/bridgev2/networkid"
 	"maunium.net/go/mautrix/bridgev2/simplevent"
-	"maunium.net/go/mautrix/event"
 
 	"go.mau.fi/mautrix-telegram/pkg/connector/ids"
 	"go.mau.fi/mautrix-telegram/pkg/gotd/tg"
@@ -97,10 +94,10 @@ func (t *TelegramClient) handleDialogs(ctx context.Context, dialogs tg.ModifiedM
 
 	var created int
 	for _, d := range dialogs.GetDialogs() {
-		if d.TypeID() != tg.DialogTypeID {
+		dialog, ok := d.(*tg.Dialog)
+		if !ok {
 			continue
 		}
-		dialog := d.(*tg.Dialog)
 
 		log := log.With().
 			Stringer("peer", dialog.Peer).
@@ -151,6 +148,7 @@ func (t *TelegramClient) handleDialogs(ctx context.Context, dialogs tg.ModifiedM
 					Msg("Not syncing portal because chat type is unsupported")
 				continue
 			}
+			// Need to get full chat info to get the member list
 			chatInfo, err = t.GetChatInfo(ctx, portal)
 			if err != nil {
 				return fmt.Errorf("failed to get chat info for %s: %w", portalKey, err)
@@ -169,9 +167,14 @@ func (t *TelegramClient) handleDialogs(ctx context.Context, dialogs tg.ModifiedM
 					Msg("Not syncing portal because channel type is unsupported")
 				continue
 			}
-			chatInfo, err = t.GetChatInfo(ctx, portal)
+			var mfm *memberFetchMeta
+			chatInfo, mfm, err = t.wrapChatInfo(channel)
 			if err != nil {
 				return fmt.Errorf("failed to get chat info for %s: %w", portalKey, err)
+			}
+			err = t.fillChannelMembers(ctx, mfm, chatInfo.Members)
+			if err != nil {
+				log.Err(err).Msg("Failed to get channel members")
 			}
 		}
 
@@ -199,14 +202,7 @@ func (t *TelegramClient) handleDialogs(ctx context.Context, dialogs tg.ModifiedM
 			}
 		}
 
-		if mu, ok := dialog.NotifySettings.GetMuteUntil(); ok {
-			chatInfo.UserLocal = &bridgev2.UserLocalPortalInfo{MutedUntil: ptr.Ptr(time.Unix(int64(mu), 0))}
-		} else {
-			chatInfo.UserLocal = &bridgev2.UserLocalPortalInfo{MutedUntil: &bridgev2.Unmuted}
-		}
-		if dialog.Pinned {
-			chatInfo.UserLocal.Tag = ptr.Ptr(event.RoomTagFavourite)
-		}
+		t.fillUserLocalMeta(chatInfo, dialog)
 
 		res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatResync{
 			ChatInfo: chatInfo,

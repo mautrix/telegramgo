@@ -122,91 +122,263 @@ func (t *TelegramClient) getDMChatInfo(ctx context.Context, userID int64) (*brid
 	return &chatInfo, nil
 }
 
-func (t *TelegramClient) getGroupChatInfo(fullChat *tg.MessagesChatFull, chatID int64) (*bridgev2.ChatInfo, bool, error) {
-	var name *string
-	var isBroadcastChannel, isMegagroup, left, found bool
-	var participantsCount int
-	for _, c := range fullChat.GetChats() {
-		if c.GetID() == chatID {
-			found = true
-			switch chat := c.(type) {
-			case *tg.Chat:
-				name = &chat.Title
-				left = chat.Left
-			case *tg.Channel:
-				name = &chat.Title
-				isBroadcastChannel = chat.Broadcast
-				isMegagroup = chat.Megagroup
-				left = chat.Left
+func isBroadcastChannel(chat tg.ChatClass) bool {
+	switch c := chat.(type) {
+	case *tg.Channel:
+		return c.Broadcast
+	default:
+		return false
+	}
+}
 
-				if value, ok := chat.GetParticipantsCount(); ok {
-					participantsCount = value
-				}
+type memberFetchMeta struct {
+	Input              *tg.InputChannel
+	IsBroadcast        bool
+	ParticipantsHidden bool
+}
+
+func (t *TelegramClient) wrapChatInfo(rawChat tg.ChatClass) (*bridgev2.ChatInfo, *memberFetchMeta, error) {
+	info := bridgev2.ChatInfo{
+		Type:        ptr.Ptr(database.RoomTypeDefault),
+		CanBackfill: true,
+		Members: &bridgev2.ChatMemberList{
+			ExcludeChangesFromTimeline: true,
+			MemberMap:                  bridgev2.ChatMemberMap{},
+		},
+		ExcludeChangesFromTimeline: true,
+	}
+	var isMegagroup, isBroadcast, left bool
+	var channelInput *tg.InputChannel
+	var avatarErr error
+	switch chat := rawChat.(type) {
+	case *tg.Chat:
+		info.Name = &chat.Title
+		info.Members.TotalMemberCount = chat.ParticipantsCount
+		info.Avatar, avatarErr = t.convertChatPhoto(chat.AsInputPeer(), chat.Photo)
+		info.Members.PowerLevels = t.getPowerLevelOverridesFromBannedRights(chat, chat.DefaultBannedRights)
+		left = chat.Left
+	case *tg.Channel:
+		channelInput = chat.AsInput()
+		info.Name = &chat.Title
+		info.Members.TotalMemberCount = chat.ParticipantsCount
+		isMegagroup = chat.Megagroup
+		isBroadcast = chat.Broadcast
+		info.Avatar, avatarErr = t.convertChatPhoto(chat.AsInputPeer(), chat.Photo)
+		info.Members.PowerLevels = t.getPowerLevelOverridesFromBannedRights(chat, chat.DefaultBannedRights)
+		left = chat.Left
+		if chat.Broadcast {
+			info.Members.MemberMap.Set(bridgev2.ChatMember{
+				EventSender: bridgev2.EventSender{Sender: ids.MakeChannelUserID(chat.GetID())},
+				PowerLevel:  superadminPowerLevel,
+			})
+		} else if chat.Megagroup && !t.main.Config.ShouldBridge(chat.ParticipantsCount) {
+			// TODO change this to a better error whenever that is implemented in mautrix-go
+			return nil, nil, fmt.Errorf("too many participants (%d) in chat %d", chat.ParticipantsCount, chat.GetID())
+		}
+	default:
+		return nil, nil, fmt.Errorf("unsupported chat type %T", rawChat)
+	}
+	if avatarErr != nil {
+		return nil, nil, fmt.Errorf("failed to wrap chat avatar: %w", avatarErr)
+	}
+	if !left {
+		info.Members.MemberMap.Add(bridgev2.ChatMember{EventSender: t.mySender()})
+	}
+	info.ExtraUpdates = func(ctx context.Context, portal *bridgev2.Portal) bool {
+		meta := portal.Metadata.(*PortalMetadata)
+		_ = updatePortalLastSyncAt(ctx, portal)
+		changed := meta.SetIsSuperGroup(isMegagroup)
+		if info.Members.TotalMemberCount != 0 && meta.ParticipantsCount != info.Members.TotalMemberCount {
+			meta.ParticipantsCount = info.Members.TotalMemberCount
+			changed = true
+		}
+		return changed
+	}
+	return &info, &memberFetchMeta{Input: channelInput, IsBroadcast: isBroadcast}, nil
+}
+
+func (t *TelegramClient) getChannelParticipants(ctx context.Context, req *tg.ChannelsGetParticipantsRequest) (*tg.ChannelsChannelParticipants, error) {
+	return APICallWithUpdates(ctx, t, func() (*tg.ChannelsChannelParticipants, error) {
+		p, err := t.client.API().ChannelsGetParticipants(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		participants, _ := p.(*tg.ChannelsChannelParticipants)
+		return participants, nil
+	})
+}
+
+func (t *TelegramClient) fillChannelMembers(ctx context.Context, mfm *memberFetchMeta, info *bridgev2.ChatMemberList) error {
+	if mfm.Input == nil || mfm.ParticipantsHidden || (mfm.IsBroadcast && !t.main.Config.MemberList.SyncBroadcastChannels) {
+		return nil
+	}
+	memberSyncLimit := t.main.Config.MemberList.NormalizedMaxInitialSync()
+
+	if memberSyncLimit <= 200 {
+		participants, err := t.getChannelParticipants(ctx, &tg.ChannelsGetParticipantsRequest{
+			Channel: mfm.Input,
+			Filter:  &tg.ChannelParticipantsRecent{},
+			Limit:   memberSyncLimit,
+		})
+		if err != nil || participants == nil {
+			return err
+		}
+		info.IsFull = len(participants.Participants) < memberSyncLimit &&
+			len(participants.Participants) >= info.TotalMemberCount &&
+			info.TotalMemberCount > 0
+		for participant := range t.filterChannelParticipants(participants.Participants, memberSyncLimit) {
+			info.MemberMap.Set(participant)
+		}
+	} else {
+		remaining := memberSyncLimit
+		var offset int
+		for remaining > 0 {
+			participants, err := t.getChannelParticipants(ctx, &tg.ChannelsGetParticipantsRequest{
+				Channel: mfm.Input,
+				Filter:  &tg.ChannelParticipantsSearch{},
+				Limit:   min(remaining, 200),
+				Offset:  offset,
+			})
+			if err != nil || participants == nil {
+				return err
 			}
+			if len(participants.Participants) == 0 {
+				info.IsFull = len(info.MemberMap) >= info.TotalMemberCount &&
+					info.TotalMemberCount > 0
+				break
+			}
+
+			for participant := range t.filterChannelParticipants(participants.Participants, remaining) {
+				info.MemberMap.Set(participant)
+			}
+
+			offset += len(participants.Participants)
+			remaining -= len(participants.Participants)
+		}
+	}
+	return nil
+}
+
+func (t *TelegramClient) fillUserLocalMeta(info *bridgev2.ChatInfo, dialog *tg.Dialog) {
+	info.UserLocal = &bridgev2.UserLocalPortalInfo{}
+	if mu, ok := dialog.NotifySettings.GetMuteUntil(); ok {
+		info.UserLocal.MutedUntil = ptr.Ptr(time.Unix(int64(mu), 0))
+	} else {
+		info.UserLocal.MutedUntil = &bridgev2.Unmuted
+	}
+	if dialog.Pinned {
+		info.UserLocal.Tag = ptr.Ptr(event.RoomTagFavourite)
+	}
+}
+
+func (t *TelegramClient) wrapFullChatInfo(fullChat *tg.MessagesChatFull) (*bridgev2.ChatInfo, *memberFetchMeta, error) {
+	var chat tg.ChatClass
+	for _, c := range fullChat.GetChats() {
+		if c.GetID() == fullChat.FullChat.GetID() {
+			chat = c
 			break
 		}
 	}
-	if !found {
-		return nil, false, fmt.Errorf("chat ID %d not found in full chat", chatID)
+	if chat == nil {
+		return nil, nil, fmt.Errorf("chat ID %d not found in full chat", fullChat.FullChat.GetID())
 	}
 
-	chatInfo := bridgev2.ChatInfo{
-		Name: name,
-		Type: ptr.Ptr(database.RoomTypeDefault),
-		Members: &bridgev2.ChatMemberList{
-			IsFull:    true,
-			MemberMap: bridgev2.ChatMemberMap{},
+	info, mfm, err := t.wrapChatInfo(chat)
+	if err != nil {
+		return nil, nil, err
+	}
 
-			ExcludeChangesFromTimeline: true,
-		},
-		CanBackfill:                true,
-		ExcludeChangesFromTimeline: true,
-		ExtraUpdates: func(ctx context.Context, p *bridgev2.Portal) bool {
-			meta := p.Metadata.(*PortalMetadata)
-			_ = updatePortalLastSyncAt(ctx, p)
-			_ = meta.SetIsSuperGroup(isMegagroup)
-			meta.ParticipantsCount = participantsCount
-
-			if reactions, ok := fullChat.FullChat.GetAvailableReactions(); ok {
-				switch typedReactions := reactions.(type) {
-				case *tg.ChatReactionsAll:
-					meta.AllowedReactions = nil
-				case *tg.ChatReactionsNone:
-					meta.AllowedReactions = []string{}
-				case *tg.ChatReactionsSome:
-					allowedReactions := make([]string, 0, len(typedReactions.Reactions))
-					for _, react := range typedReactions.Reactions {
-						emoji, ok := react.(*tg.ReactionEmoji)
-						if ok {
-							allowedReactions = append(allowedReactions, emoji.Emoticon)
-						}
-					}
-					slices.Sort(allowedReactions)
-					if !slices.Equal(meta.AllowedReactions, allowedReactions) {
-						meta.AllowedReactions = allowedReactions
-					}
+	var newAllowedReactions []string
+	if reactions, ok := fullChat.FullChat.GetAvailableReactions(); ok {
+		switch typedReactions := reactions.(type) {
+		case *tg.ChatReactionsAll:
+			newAllowedReactions = nil
+		case *tg.ChatReactionsNone:
+			newAllowedReactions = []string{}
+		case *tg.ChatReactionsSome:
+			newAllowedReactions = make([]string, 0, len(typedReactions.Reactions))
+			for _, react := range typedReactions.Reactions {
+				emoji, ok := react.(*tg.ReactionEmoji)
+				if ok {
+					newAllowedReactions = append(newAllowedReactions, emoji.Emoticon)
 				}
 			}
-
-			return true
-		},
+			slices.Sort(newAllowedReactions)
+		}
 	}
-	if !left {
-		chatInfo.Members.MemberMap.Add(bridgev2.ChatMember{EventSender: t.mySender()})
-	}
-
 	if ttl, ok := fullChat.FullChat.GetTTLPeriod(); ok {
-		chatInfo.Disappear = &database.DisappearingSetting{
+		info.Disappear = &database.DisappearingSetting{
 			Type:  event.DisappearingTypeAfterSend,
 			Timer: time.Duration(ttl) * time.Second,
 		}
 	}
-
 	if about := fullChat.FullChat.GetAbout(); about != "" {
-		chatInfo.Topic = &about
+		info.Topic = &about
+	}
+	info.ExtraUpdates = bridgev2.MergeExtraUpdaters(
+		info.ExtraUpdates,
+		reactionUpdater(newAllowedReactions),
+		markFullSynced,
+	)
+
+	switch typedFullChat := fullChat.FullChat.(type) {
+	case *tg.ChatFull:
+		participants, _ := typedFullChat.GetParticipants().(*tg.ChatParticipants)
+		memberSyncLimit := t.main.Config.MemberList.NormalizedMaxInitialSync()
+		info.Members.IsFull = true
+		for i, user := range participants.GetParticipants() {
+			var powerLevel *int
+			switch user.(type) {
+			case *tg.ChatParticipantCreator:
+				powerLevel = creatorPowerLevel
+			case *tg.ChatParticipantAdmin:
+				powerLevel = modPowerLevel
+			default:
+				powerLevel = ptr.Ptr(0)
+			}
+
+			info.Members.MemberMap.Set(bridgev2.ChatMember{
+				EventSender: t.senderForUserID(user.GetUserID()),
+				PowerLevel:  powerLevel,
+			})
+
+			if i >= memberSyncLimit {
+				info.Members.IsFull = false
+				break
+			}
+		}
+	case *tg.ChannelFull:
+		mfm.ParticipantsHidden = !typedFullChat.CanViewParticipants || typedFullChat.ParticipantsHidden
 	}
 
-	return &chatInfo, isBroadcastChannel, nil
+	return info, mfm, nil
+}
+
+func reactionUpdater(newAllowedReactions []string) bridgev2.ExtraUpdater[*bridgev2.Portal] {
+	return func(ctx context.Context, portal *bridgev2.Portal) bool {
+		meta := portal.Metadata.(*PortalMetadata)
+		if newAllowedReactions == nil {
+			if meta.AllowedReactions == nil {
+				return false
+			}
+			meta.AllowedReactions = nil
+			return true
+		}
+		if meta.AllowedReactions == nil || !slices.Equal(newAllowedReactions, meta.AllowedReactions) {
+			meta.AllowedReactions = newAllowedReactions
+			return true
+		}
+		return false
+	}
+}
+
+func markFullSynced(ctx context.Context, portal *bridgev2.Portal) bool {
+	meta := portal.Metadata.(*PortalMetadata)
+	if !meta.FullSynced {
+		meta.FullSynced = true
+		return true
+	}
+	return false
 }
 
 func (t *TelegramClient) avatarFromPhoto(ctx context.Context, peerType ids.PeerType, peerID int64, photo tg.PhotoClass) *bridgev2.Avatar {
@@ -265,14 +437,11 @@ func (t *TelegramClient) filterChannelParticipants(participants []tg.ChannelPart
 }
 
 func (t *TelegramClient) GetChatInfo(ctx context.Context, portal *bridgev2.Portal) (*bridgev2.ChatInfo, error) {
-	// FIXME GetFullChat should be avoided. Using only bundled info should be preferred whenever possible
-	//       (e.g. when syncing dialogs, only use the data in the dialog list, don't fetch each chat info separately).
 	peerType, id, err := ids.ParsePortalID(portal.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	memberSyncLimit := t.main.Config.MemberList.NormalizedMaxInitialSync()
 	switch peerType {
 	case ids.PeerTypeUser:
 		return t.getDMChatInfo(ctx, id)
@@ -283,50 +452,8 @@ func (t *TelegramClient) GetChatInfo(ctx context.Context, portal *bridgev2.Porta
 		if err != nil {
 			return nil, err
 		}
-		chatInfo, _, err := t.getGroupChatInfo(fullChat, id)
-		if err != nil {
-			return nil, err
-		}
-
-		chatFull, ok := fullChat.FullChat.(*tg.ChatFull)
-		if !ok {
-			return nil, fmt.Errorf("full chat is %T not *tg.ChatFull", fullChat.FullChat)
-		}
-		chatInfo.Avatar = t.avatarFromPhoto(ctx, peerType, id, chatFull.ChatPhoto)
-		chatInfo.Members.PowerLevels = t.getGroupChatPowerLevels(ctx, fullChat.GetChats()[0])
-
-		if chatFull.Participants.TypeID() == tg.ChatParticipantsForbiddenTypeID {
-			chatInfo.Members.IsFull = false
-			return chatInfo, nil
-		}
-		chatParticipants := chatFull.Participants.(*tg.ChatParticipants)
-
-		if !t.main.Config.ShouldBridge(len(chatParticipants.Participants)) {
-			// TODO change this to a better error whenever that is implemented in mautrix-go
-			return nil, fmt.Errorf("too many participants (%d) in chat %d", len(chatParticipants.Participants), id)
-		}
-
-		for _, user := range chatParticipants.GetParticipants() {
-			var powerLevel *int
-			switch user.(type) {
-			case *tg.ChatParticipantCreator:
-				powerLevel = creatorPowerLevel
-			case *tg.ChatParticipantAdmin:
-				powerLevel = modPowerLevel
-			default:
-				powerLevel = ptr.Ptr(0)
-			}
-
-			chatInfo.Members.MemberMap.Set(bridgev2.ChatMember{
-				EventSender: t.senderForUserID(user.GetUserID()),
-				PowerLevel:  powerLevel,
-			})
-
-			if len(chatInfo.Members.MemberMap) >= memberSyncLimit {
-				break
-			}
-		}
-		return chatInfo, nil
+		info, _, err := t.wrapFullChatInfo(fullChat)
+		return info, err
 	case ids.PeerTypeChannel:
 		accessHash, err := t.ScopedStore.GetAccessHash(ctx, ids.PeerTypeChannel, id)
 		if err != nil {
@@ -339,115 +466,17 @@ func (t *TelegramClient) GetChatInfo(ctx context.Context, portal *bridgev2.Porta
 		if err != nil {
 			return nil, err
 		}
-
-		chatInfo, isBroadcastChannel, err := t.getGroupChatInfo(fullChat, id)
+		info, mfm, err := t.wrapFullChatInfo(fullChat)
 		if err != nil {
 			return nil, err
 		}
-
-		channelFull, ok := fullChat.FullChat.(*tg.ChannelFull)
-		if !ok {
-			return nil, fmt.Errorf("full chat is %T not *tg.ChannelFull", fullChat.FullChat)
+		err = t.fillChannelMembers(ctx, mfm, info.Members)
+		if err != nil {
+			zerolog.Ctx(ctx).Err(err).Msg("Failed to get channel members")
 		}
-
-		if portal.Metadata.(*PortalMetadata).IsSuperGroup && !t.main.Config.ShouldBridge(channelFull.ParticipantsCount) {
-			// TODO change this to a better error whenever that is implemented in mautrix-go
-			return nil, fmt.Errorf("too many participants (%d) in chat %d", channelFull.ParticipantsCount, id)
-		}
-
-		chatInfo.Avatar = t.avatarFromPhoto(ctx, peerType, id, channelFull.ChatPhoto)
-
-		// TODO save available reactions?
-		// TODO save reactions limit?
-		// TODO save emojiset?
-
-		chatInfo.Members.IsFull = false
-		chatInfo.Members.PowerLevels = t.getGroupChatPowerLevels(ctx, fullChat.GetChats()[0])
-		if !portal.Metadata.(*PortalMetadata).IsSuperGroup {
-			// Add the channel user
-			chatInfo.Members.MemberMap.Set(bridgev2.ChatMember{
-				EventSender: bridgev2.EventSender{Sender: ids.MakeChannelUserID(id)},
-				PowerLevel:  superadminPowerLevel,
-			})
-		}
-
-		// Just return the current user as a member if we can't view the
-		// participants or the max initial sync is 0.
-		if t.main.Config.MemberList.MaxInitialSync == 0 || !channelFull.CanViewParticipants || channelFull.ParticipantsHidden {
-			return chatInfo, nil
-		}
-
-		// If this is a broadcast channel and we're not syncing broadcast
-		// channels, just return the chat info without all of the participant
-		// info.
-		if isBroadcastChannel && !t.main.Config.MemberList.SyncBroadcastChannels {
-			return chatInfo, nil
-		}
-
-		if memberSyncLimit <= 200 {
-			participants, err := APICallWithUpdates(ctx, t, func() (*tg.ChannelsChannelParticipants, error) {
-				p, err := t.client.API().ChannelsGetParticipants(ctx, &tg.ChannelsGetParticipantsRequest{
-					Channel: inputChannel,
-					Filter:  &tg.ChannelParticipantsRecent{},
-					Limit:   memberSyncLimit,
-				})
-				if err != nil {
-					return nil, err
-				}
-				participants, ok := p.(*tg.ChannelsChannelParticipants)
-				if !ok {
-					return nil, fmt.Errorf("returned participants is %T not *tg.ChannelsChannelParticipants", p)
-				} else {
-					return participants, nil
-				}
-			})
-			if err != nil {
-				return nil, err
-			}
-			chatInfo.Members.IsFull = len(participants.Participants) < memberSyncLimit
-			for participant := range t.filterChannelParticipants(participants.Participants, memberSyncLimit) {
-				chatInfo.Members.MemberMap.Set(participant)
-			}
-		} else {
-			remaining := memberSyncLimit
-			var offset int
-			for remaining > 0 {
-				participants, err := APICallWithUpdates(ctx, t, func() (*tg.ChannelsChannelParticipants, error) {
-					p, err := t.client.API().ChannelsGetParticipants(ctx, &tg.ChannelsGetParticipantsRequest{
-						Channel: inputChannel,
-						Filter:  &tg.ChannelParticipantsSearch{},
-						Limit:   min(remaining, 200),
-						Offset:  offset,
-					})
-					if err != nil {
-						return nil, err
-					}
-					participants, ok := p.(*tg.ChannelsChannelParticipants)
-					if !ok {
-						return nil, fmt.Errorf("returned participants is %T not *tg.ChannelsChannelParticipants", p)
-					} else {
-						return participants, nil
-					}
-				})
-				if err != nil {
-					return nil, err
-				}
-				if len(participants.Participants) == 0 {
-					chatInfo.Members.IsFull = true
-					break
-				}
-
-				for participant := range t.filterChannelParticipants(participants.Participants, remaining) {
-					chatInfo.Members.MemberMap.Set(participant)
-				}
-
-				offset += len(participants.Participants)
-				remaining -= len(participants.Participants)
-			}
-		}
-		return chatInfo, nil
+		return info, nil
 	default:
-		panic(fmt.Sprintf("unsupported peer type %s", peerType))
+		return nil, fmt.Errorf("unsupported peer type %s", peerType)
 	}
 }
 
@@ -467,34 +496,6 @@ func (t *TelegramClient) getDMPowerLevels(ghost *bridgev2.Ghost) *bridgev2.Power
 		event.BeeperDeleteChat:             0,
 	}
 	return &plo
-}
-
-func (t *TelegramClient) getGroupChatPowerLevels(ctx context.Context, entity tg.ChatClass) *bridgev2.PowerLevelOverrides {
-	log := zerolog.Ctx(ctx).With().
-		Str("action", "get_group_chat_power_levels").
-		Logger()
-
-	dbrAble, ok := entity.(interface {
-		GetDefaultBannedRights() (tg.ChatBannedRights, bool)
-	})
-	var dbr tg.ChatBannedRights
-	if ok {
-		dbr, ok = dbrAble.GetDefaultBannedRights()
-		if !ok {
-			dbr = tg.ChatBannedRights{
-				InviteUsers:  true,
-				ChangeInfo:   true,
-				PinMessages:  true,
-				SendStickers: false,
-				SendMessages: false,
-			}
-		}
-	} else {
-		log.Error().
-			Type("entity_type", entity).
-			Msg("couldn't get default banned rights from entity, assuming you don't have any rights")
-	}
-	return t.getPowerLevelOverridesFromBannedRights(entity, dbr)
 }
 
 func (t *TelegramClient) getPowerLevelOverridesFromBannedRights(entity tg.ChatClass, dbr tg.ChatBannedRights) *bridgev2.PowerLevelOverrides {

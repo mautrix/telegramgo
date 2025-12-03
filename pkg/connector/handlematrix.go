@@ -95,7 +95,7 @@ func (t *TelegramClient) HandleMatrixViewingChat(ctx context.Context, msg *bridg
 		return nil
 	}
 	meta := msg.Portal.Metadata.(*PortalMetadata)
-	if meta.LastSync.Add(24 * time.Hour).Before(time.Now()) {
+	if !meta.FullSynced || meta.LastSync.Add(24*time.Hour).Before(time.Now()) {
 		t.userLogin.QueueRemoteEvent(&simplevent.ChatResync{
 			EventMeta: simplevent.EventMeta{
 				Type:      bridgev2.RemoteEventChatResync,
@@ -736,6 +736,17 @@ func (t *TelegramClient) HandleMatrixReadReceipt(ctx context.Context, msg *bridg
 
 		reactionPollErr = t.pollForReactions(ctx, msg.Portal.PortalKey, inputPeer)
 	}()
+
+	if peerType == ids.PeerTypeChannel && !msg.Portal.Metadata.(*PortalMetadata).FullSynced {
+		log.Debug().Msg("Scheduling chat resync on read receipt because channel has never got a full sync")
+		go t.userLogin.QueueRemoteEvent(&simplevent.ChatResync{
+			EventMeta: simplevent.EventMeta{
+				Type:      bridgev2.RemoteEventChatResync,
+				PortalKey: msg.Portal.PortalKey,
+			},
+			GetChatInfoFunc: t.GetChatInfo,
+		})
+	}
 
 	wg.Wait()
 	return errors.Join(readMentionsErr, readReactionsErr, readMessagesErr, reactionPollErr)

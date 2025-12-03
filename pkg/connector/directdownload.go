@@ -186,31 +186,12 @@ func (tc *TelegramConnector) Download(ctx context.Context, mediaID networkid.Med
 			return nil, fmt.Errorf("failed to create user photo transferer: %w", err)
 		}
 	} else if info.PeerType == ids.PeerTypeChat {
-		fullChat, err := APICallWithUpdates(ctx, client, func() (*tg.MessagesChatFull, error) {
-			return client.client.API().MessagesGetFullChat(ctx, info.PeerID)
-		})
+		readyTransferer = transferer.WithPeerPhoto(&tg.InputPeerChat{ChatID: info.PeerID}, info.ID)
+	} else if info.PeerType == ids.PeerTypeChannel {
+		readyTransferer, err = transferer.WithChannelPhoto(ctx, client.ScopedStore, info.PeerID, info.ID)
 		if err != nil {
 			return nil, err
 		}
-
-		chatFull, ok := fullChat.FullChat.(*tg.ChatFull)
-		if !ok {
-			return nil, fmt.Errorf("full chat is %T not *tg.ChatFull", fullChat.FullChat)
-		} else if chatFull.ChatPhoto == nil {
-			// FIXME: these 2 are basically not found errors
-			return nil, fmt.Errorf("photo not found on chat")
-		} else if photoID := chatFull.ChatPhoto.GetID(); photoID != info.ID {
-			return nil, fmt.Errorf("photo id mismatch: %d != %d", photoID, info.ID)
-		}
-
-		readyTransferer = transferer.WithPhoto(chatFull.ChatPhoto)
-	} else if info.PeerType == ids.PeerTypeChannel {
-		accessHash, err := client.ScopedStore.GetAccessHash(ctx, ids.PeerTypeChannel, info.PeerID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get channel access hash: %w", err)
-		}
-
-		readyTransferer = transferer.WithChannelPhoto(info.PeerID, accessHash, info.ID)
 	} else if info.PeerType == ids.FakePeerTypeEmoji {
 		customEmojiDocuments, err := client.client.API().MessagesGetCustomEmojiDocuments(ctx, []int64{info.ID})
 		if err != nil {

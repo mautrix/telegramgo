@@ -338,14 +338,15 @@ func NewTelegramClient(ctx context.Context, tc *TelegramConnector, login *bridge
 				portalKey = client.makePortalKeyFromID(ids.PeerTypeChannel, chatID)
 			} else if submatches[1] == "premium" {
 				portalKey = client.makePortalKeyFromID(ids.PeerTypeUser, 777000)
-			} else {
-				// FIXME why does this not handle usernames??
-				userID, err := strconv.ParseInt(submatches[1], 10, 64)
-				if err != nil {
-					log.Warn().Err(err).Msg("error parsing user ID")
-					return url
-				}
+			} else if userID, err := strconv.ParseInt(submatches[1], 10, 64); err == nil && userID > 0 {
 				portalKey = client.makePortalKeyFromID(ids.PeerTypeUser, userID)
+			} else if peerType, peerID, err := client.ScopedStore.GetEntityIDByUsername(ctx, submatches[1]); err != nil {
+				log.Err(err).Msg("Failed to get entity ID by username")
+				return url
+			} else if peerType != "" {
+				portalKey = client.makePortalKeyFromID(peerType, peerID)
+			} else {
+				return url
 			}
 
 			portal, err := tc.Bridge.DB.Portal.GetByKey(ctx, portalKey)

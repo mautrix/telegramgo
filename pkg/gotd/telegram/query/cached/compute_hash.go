@@ -1,7 +1,8 @@
 package cached
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 
 	"go.mau.fi/mautrix-telegram/pkg/gotd/telegram/query/hasher"
 	"go.mau.fi/mautrix-telegram/pkg/gotd/tg"
@@ -10,8 +11,8 @@ import (
 func (s *ContactsGetContacts) computeHash(v *tg.ContactsContacts) int64 {
 	cts := v.Contacts
 
-	sort.SliceStable(cts, func(i, j int) bool {
-		return cts[i].UserID < cts[j].UserID
+	slices.SortStableFunc(cts, func(a, b tg.Contact) int {
+		return cmp.Compare(a.UserID, b.UserID)
 	})
 	h := hasher.Hasher{}
 	for _, contact := range cts {
@@ -24,8 +25,8 @@ func (s *ContactsGetContacts) computeHash(v *tg.ContactsContacts) int64 {
 func (s *MessagesGetQuickReplies) computeHash(v *tg.MessagesQuickReplies) int64 {
 	r := v.QuickReplies
 
-	sort.SliceStable(r, func(i, j int) bool {
-		return r[i].ShortcutID < r[j].ShortcutID
+	slices.SortStableFunc(r, func(a, b tg.QuickReply) int {
+		return cmp.Compare(a.ShortcutID, b.ShortcutID)
 	})
 	h := hasher.Hasher{}
 	for _, contact := range r {
@@ -38,8 +39,8 @@ func (s *MessagesGetQuickReplies) computeHash(v *tg.MessagesQuickReplies) int64 
 func (s *PaymentsGetStarGiftCollections) computeHash(v *tg.PaymentsStarGiftCollections) int64 {
 	collections := v.Collections
 
-	sort.SliceStable(collections, func(i, j int) bool {
-		return collections[i].CollectionID < collections[j].CollectionID
+	slices.SortStableFunc(collections, func(a, b tg.StarGiftCollection) int {
+		return cmp.Compare(a.CollectionID, b.CollectionID)
 	})
 
 	h := hasher.Hasher{}
@@ -53,9 +54,7 @@ func (s *PaymentsGetStarGiftCollections) computeHash(v *tg.PaymentsStarGiftColle
 func (s *AccountGetSavedMusicIDs) computeHash(v *tg.AccountSavedMusicIDs) int64 {
 	ids := v.IDs
 
-	sort.SliceStable(ids, func(i, j int) bool {
-		return ids[i] < ids[j]
-	})
+	slices.Sort(ids)
 
 	h := hasher.Hasher{}
 	for _, id := range ids {
@@ -68,8 +67,8 @@ func (s *AccountGetSavedMusicIDs) computeHash(v *tg.AccountSavedMusicIDs) int64 
 func (s *PaymentsGetStarGiftActiveAuctions) computeHash(v *tg.PaymentsStarGiftActiveAuctions) int64 {
 	auctions := v.Auctions
 
-	sort.SliceStable(auctions, func(i, j int) bool {
-		return auctions[i].GetGift().GetID() < auctions[j].GetGift().GetID()
+	slices.SortStableFunc(auctions, func(a, b tg.StarGiftActiveAuctionState) int {
+		return cmp.Compare(a.GetGift().GetID(), b.GetGift().GetID())
 	})
 
 	h := hasher.Hasher{}

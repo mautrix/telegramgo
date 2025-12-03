@@ -61,8 +61,7 @@ type TelegramConfig struct {
 	AnimatedSticker   media.AnimatedStickerConfig `yaml:"animated_sticker"`
 	ImageAsFilePixels int                         `yaml:"image_as_file_pixels"`
 
-	DisableViewOnce     bool `yaml:"disable_view_once"`
-	DisableDisappearing bool `yaml:"disable_disappearing"`
+	DisableViewOnce bool `yaml:"disable_view_once"`
 
 	MemberList MemberListConfig `yaml:"member_list"`
 
@@ -110,7 +109,6 @@ func upgradeConfig(helper up.Helper) {
 	helper.Copy(up.Int, "animated_sticker", "args", "fps")
 	helper.Copy(up.Int, "image_as_file_pixels")
 	helper.Copy(up.Bool, "disable_view_once")
-	helper.Copy(up.Bool, "disable_disappearing")
 	helper.Copy(up.Int, "member_list", "max_initial_sync")
 	helper.Copy(up.Bool, "member_list", "sync_broadcast_channels")
 	helper.Copy(up.Bool, "member_list", "skip_deleted")

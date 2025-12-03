@@ -71,11 +71,13 @@ func (s Style) Format(message string) string {
 	case StyleCustomEmoji:
 		if s.EmojiInfo.Emoji != "" {
 			return s.EmojiInfo.Emoji
-		} else {
+		} else if s.EmojiInfo.EmojiURI != "" {
 			return fmt.Sprintf(
 				`<img data-mx-emoticon data-mau-animated-emoji src="%s" height="32" width="32" alt="%s" title="%s"/>`,
 				s.EmojiInfo.EmojiURI, message, message,
 			)
+		} else {
+			return message
 		}
 	case StyleBotCommand:
 		return fmt.Sprintf("<font color='#3771bb'>%s</font>", message)

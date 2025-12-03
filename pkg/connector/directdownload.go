@@ -34,6 +34,62 @@ import (
 
 var _ bridgev2.DirectMediableNetwork = (*TelegramConnector)(nil)
 
+func (tc *TelegramClient) refetchMedia(ctx context.Context, peerType ids.PeerType, peerID int64, msgID int) (tg.MessageMediaClass, error) {
+	var messages tg.ModifiedMessagesMessages
+	var err error
+	switch peerType {
+	case ids.PeerTypeUser, ids.PeerTypeChat:
+		messages, err = APICallWithUpdates(ctx, tc, func() (tg.ModifiedMessagesMessages, error) {
+			m, err := tc.client.API().MessagesGetMessages(ctx, []tg.InputMessageClass{
+				&tg.InputMessageID{ID: msgID},
+			})
+			if err != nil {
+				return nil, err
+			} else if messages, ok := m.(tg.ModifiedMessagesMessages); !ok {
+				return nil, fmt.Errorf("unsupported messages type %T", messages)
+			} else {
+				return messages, nil
+			}
+		})
+	case ids.PeerTypeChannel:
+		var accessHash int64
+		accessHash, err = tc.ScopedStore.GetAccessHash(ctx, ids.PeerTypeChannel, peerID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get channel access hash: %w", err)
+		}
+		messages, err = APICallWithUpdates(ctx, tc, func() (tg.ModifiedMessagesMessages, error) {
+			m, err := tc.client.API().ChannelsGetMessages(ctx, &tg.ChannelsGetMessagesRequest{
+				Channel: &tg.InputChannel{ChannelID: peerID, AccessHash: accessHash},
+				ID: []tg.InputMessageClass{
+					&tg.InputMessageID{ID: msgID},
+				},
+			})
+			if err != nil {
+				return nil, err
+			} else if messages, ok := m.(tg.ModifiedMessagesMessages); !ok {
+				return nil, fmt.Errorf("unsupported messages type %T", messages)
+			} else {
+				return messages, nil
+			}
+		})
+	default:
+		return nil, fmt.Errorf("unknown peer type %s", peerType)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get message %d/%d for media info: %w", peerID, msgID, err)
+	}
+
+	if len(messages.GetMessages()) != 1 {
+		return nil, fmt.Errorf("wrong number of messages retrieved %d", len(messages.GetMessages()))
+	} else if msg, ok := messages.GetMessages()[0].(*tg.Message); !ok {
+		return nil, fmt.Errorf("message was of the wrong type %s", messages.GetMessages()[0].TypeName())
+	} else if msg.ID != msgID {
+		return nil, fmt.Errorf("no media found with ID %d", msgID)
+	} else {
+		return msg.Media, nil
+	}
+}
+
 func (tc *TelegramConnector) Download(ctx context.Context, mediaID networkid.MediaID, params map[string]string) (mediaproxy.GetMediaResponse, error) {
 	info, err := ids.ParseDirectMediaInfo(mediaID)
 	if err != nil {
@@ -79,62 +135,12 @@ func (tc *TelegramConnector) Download(ctx context.Context, mediaID networkid.Med
 	var readyTransferer *media.ReadyTransferer
 
 	if info.MessageID > 0 {
-		var messages tg.ModifiedMessagesMessages
-		switch info.PeerType {
-		case ids.PeerTypeUser, ids.PeerTypeChat:
-			messages, err = APICallWithUpdates(ctx, client, func() (tg.ModifiedMessagesMessages, error) {
-				m, err := client.client.API().MessagesGetMessages(ctx, []tg.InputMessageClass{
-					&tg.InputMessageID{ID: int(info.MessageID)},
-				})
-				if err != nil {
-					return nil, err
-				} else if messages, ok := m.(tg.ModifiedMessagesMessages); !ok {
-					return nil, fmt.Errorf("unsupported messages type %T", messages)
-				} else {
-					return messages, nil
-				}
-			})
-		case ids.PeerTypeChannel:
-			var accessHash int64
-			accessHash, err = client.ScopedStore.GetAccessHash(ctx, ids.PeerTypeChannel, info.PeerID)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get channel access hash: %w", err)
-			} else {
-				messages, err = APICallWithUpdates(ctx, client, func() (tg.ModifiedMessagesMessages, error) {
-					m, err := client.client.API().ChannelsGetMessages(ctx, &tg.ChannelsGetMessagesRequest{
-						Channel: &tg.InputChannel{ChannelID: info.PeerID, AccessHash: accessHash},
-						ID: []tg.InputMessageClass{
-							&tg.InputMessageID{ID: int(info.MessageID)},
-						},
-					})
-					if err != nil {
-						return nil, err
-					} else if messages, ok := m.(tg.ModifiedMessagesMessages); !ok {
-						return nil, fmt.Errorf("unsupported messages type %T", messages)
-					} else {
-						return messages, nil
-					}
-				})
-			}
-		default:
-			return nil, fmt.Errorf("unknown peer type %s", info.PeerType)
-		}
+		rawMsgMedia, err := client.refetchMedia(ctx, info.PeerType, info.PeerID, int(info.MessageID))
 		if err != nil {
-			return nil, fmt.Errorf("failed to get messages for %+v: %w", info, err)
+			return nil, fmt.Errorf("failed to refetch media message: %w", err)
 		}
 
-		var msgMedia tg.MessageMediaClass
-		if len(messages.GetMessages()) != 1 {
-			return nil, fmt.Errorf("wrong number of messages retrieved %d", len(messages.GetMessages()))
-		} else if msg, ok := messages.GetMessages()[0].(*tg.Message); !ok {
-			return nil, fmt.Errorf("message was of the wrong type %s", messages.GetMessages()[0].TypeName())
-		} else if msg.ID != int(info.MessageID) {
-			return nil, fmt.Errorf("no media found with ID %d", info.MessageID)
-		} else {
-			msgMedia = msg.Media
-		}
-
-		switch msgMedia := msgMedia.(type) {
+		switch msgMedia := rawMsgMedia.(type) {
 		case *tg.MessageMediaPhoto:
 			log.Debug().
 				Int64("photo_id", msgMedia.Photo.GetID()).

@@ -69,16 +69,21 @@ func mediaHashID(ctx context.Context, m tg.MessageMediaClass) []byte {
 	return nil
 }
 
-func (c *TelegramClient) mediaToMatrix(ctx context.Context, portal *bridgev2.Portal, intent bridgev2.MatrixAPI, msg *tg.Message) (*bridgev2.ConvertedMessagePart, *database.DisappearingSetting, []byte, error) {
+func (c *TelegramClient) mediaToMatrix(
+	ctx context.Context,
+	portal *bridgev2.Portal,
+	intent bridgev2.MatrixAPI,
+	msg *tg.Message,
+) (*bridgev2.ConvertedMessagePart, *database.DisappearingSetting, []byte) {
 	media, ok := msg.GetMedia()
 	if !ok {
-		return nil, nil, nil, nil
+		return nil, nil, nil
 	}
 
 	switch media.TypeID() {
 	case tg.MessageMediaWebPageTypeID:
 		// Already handled in the message handling
-		return nil, nil, nil, nil
+		return nil, nil, nil
 	case tg.MessageMediaUnsupportedTypeID:
 		return &bridgev2.ConvertedMessagePart{
 			Type: event.EventMessage,
@@ -89,21 +94,20 @@ func (c *TelegramClient) mediaToMatrix(ctx context.Context, portal *bridgev2.Por
 			Extra: map[string]any{
 				"fi.mau.telegram.unsupported": true,
 			},
-		}, nil, nil, nil
+		}, nil, nil
 	case tg.MessageMediaPhotoTypeID, tg.MessageMediaDocumentTypeID:
-		converted, disappearingSetting, err := c.convertMediaRequiringUpload(ctx, portal, intent, msg.ID, media)
-		return converted, disappearingSetting, mediaHashID(ctx, media), err
+		converted, disappearingSetting := c.convertMediaRequiringUpload(ctx, portal, intent, msg.ID, media, true)
+		return converted, disappearingSetting, mediaHashID(ctx, media)
 	case tg.MessageMediaContactTypeID:
-		return c.convertContact(media), nil, nil, nil
+		return c.convertContact(media), nil, nil
 	case tg.MessageMediaGeoTypeID, tg.MessageMediaGeoLiveTypeID, tg.MessageMediaVenueTypeID:
-		location, err := convertLocation(media)
-		return location, nil, nil, err
+		return convertLocation(media), nil, nil
 	case tg.MessageMediaPollTypeID:
-		return convertPoll(media), nil, nil, nil
+		return convertPoll(media), nil, nil
 	case tg.MessageMediaDiceTypeID:
-		return convertDice(media), nil, nil, nil
+		return convertDice(media), nil, nil
 	case tg.MessageMediaGameTypeID:
-		return convertGame(media), nil, nil, nil
+		return convertGame(media), nil, nil
 	default:
 		// TODO: support these properly
 		return &bridgev2.ConvertedMessagePart{
@@ -116,64 +120,16 @@ func (c *TelegramClient) mediaToMatrix(ctx context.Context, portal *bridgev2.Por
 				"fi.mau.telegram.unsupported": true,
 				"fi.mau.telegram.type_id":     media.TypeID(),
 			},
-		}, nil, nil, nil
+		}, nil, nil
 	}
 }
 
-func (c *TelegramClient) convertToMatrixWithRefetch(ctx context.Context, portal *bridgev2.Portal, intent bridgev2.MatrixAPI, msg *tg.Message) (cm *bridgev2.ConvertedMessage, err error) {
-	cm, err = c.convertToMatrix(ctx, portal, intent, msg)
-	if !tgerr.Is(err, tg.ErrFileReferenceExpired) {
-		return cm, err
-	}
-
-	// If the error is that the file reference expired, refetch the message and
-	// try to convert it again.
-	log := zerolog.Ctx(ctx).With().Bool("message_refetch", true).Logger()
-	ctx = log.WithContext(ctx)
-	log.Warn().Err(err).Msg("Refetching message to convert media")
-
-	// TODO deduplicate this with the direct download code
-	var m tg.MessagesMessagesClass
-	peerType, id, err := ids.ParsePortalID(portal.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse portal ID: %w", err)
-	} else if peerType == ids.PeerTypeChannel {
-		var accessHash int64
-		accessHash, err = c.ScopedStore.GetAccessHash(ctx, ids.PeerTypeChannel, id)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get channel access hash: %w", err)
-		}
-		m, err = c.client.API().ChannelsGetMessages(ctx, &tg.ChannelsGetMessagesRequest{
-			Channel: &tg.InputChannel{
-				ChannelID:  id,
-				AccessHash: accessHash,
-			},
-			ID: []tg.InputMessageClass{
-				&tg.InputMessageID{ID: msg.ID},
-			},
-		})
-	} else {
-		m, err = c.client.API().MessagesGetMessages(ctx, []tg.InputMessageClass{
-			&tg.InputMessageID{ID: msg.ID},
-		})
-	}
-
-	if err != nil {
-		return nil, err
-	} else if messages, ok := m.(tg.ModifiedMessagesMessages); !ok {
-		return nil, fmt.Errorf("unsupported messages type %T", messages)
-	} else if len(messages.GetMessages()) != 1 {
-		return nil, fmt.Errorf("wrong number of messages retrieved %d", len(messages.GetMessages()))
-	} else if refetchedMsg, ok := messages.GetMessages()[0].(*tg.Message); !ok {
-		return nil, fmt.Errorf("message was of the wrong type %s", messages.GetMessages()[0].TypeName())
-	} else if refetchedMsg.ID != msg.ID {
-		return nil, fmt.Errorf("no media found with ID %d", msg.ID)
-	} else {
-		return c.convertToMatrix(ctx, portal, intent, refetchedMsg)
-	}
-}
-
-func (c *TelegramClient) convertToMatrix(ctx context.Context, portal *bridgev2.Portal, intent bridgev2.MatrixAPI, msg *tg.Message) (cm *bridgev2.ConvertedMessage, err error) {
+func (c *TelegramClient) convertToMatrix(
+	ctx context.Context,
+	portal *bridgev2.Portal,
+	intent bridgev2.MatrixAPI,
+	msg *tg.Message,
+) (cm *bridgev2.ConvertedMessage, err error) {
 	log := zerolog.Ctx(ctx).With().Str("conversion_direction", "to_matrix").Logger()
 	ctx = log.WithContext(ctx)
 
@@ -183,7 +139,7 @@ func (c *TelegramClient) convertToMatrix(ctx context.Context, portal *bridgev2.P
 
 	var perMessageProfile *event.BeeperPerMessageProfile
 	if peerType, _, err := ids.ParsePortalID(portal.ID); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to parse portal ID: %w", err)
 	} else if peerType == ids.PeerTypeChannel && !portal.Metadata.(*PortalMetadata).IsSuperGroup {
 		var sender *networkid.UserID
 		if msg.Out {
@@ -194,7 +150,7 @@ func (c *TelegramClient) convertToMatrix(ctx context.Context, portal *bridgev2.P
 		if sender != nil {
 			profile, err := portal.PerMessageProfileForSender(ctx, *sender)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to get per-message profile for sender %s: %w", *sender, err)
 			}
 			perMessageProfile = &profile
 		}
@@ -205,35 +161,28 @@ func (c *TelegramClient) convertToMatrix(ctx context.Context, portal *bridgev2.P
 	if len(msg.Message) > 0 {
 		hasher.Write([]byte(msg.Message))
 
-		content, err := c.parseBodyAndHTML(ctx, msg.Message, msg.Entities)
-		if err != nil {
-			return nil, err
-		}
+		content := c.parseBodyAndHTML(ctx, msg.Message, msg.Entities)
 		if media, ok := msg.GetMedia(); ok && media.TypeID() == tg.MessageMediaWebPageTypeID {
 			webpageCtx, webpageCtxCancel := context.WithTimeout(ctx, time.Second*5)
 			defer webpageCtxCancel()
 			preview, err := c.webpageToBeeperLinkPreview(webpageCtx, portal, intent, msg, media)
 			if err != nil {
-				log.Err(err).Msg("error converting webpage to link preview")
+				log.Err(err).Msg("Failed to convert webpage to link preview")
 			} else if preview != nil {
 				hasher.Write([]byte(preview.MatchedURL))
 				content.BeeperLinkPreviews = append(content.BeeperLinkPreviews, preview)
 			}
 		}
 
-		cm.Parts = []*bridgev2.ConvertedMessagePart{
-			{
-				Type:    event.EventMessage,
-				Content: content,
-			},
-		}
+		cm.Parts = []*bridgev2.ConvertedMessagePart{{
+			Type:    event.EventMessage,
+			Content: content,
+		}}
 	}
 
 	var contentURI id.ContentURIString
-	mediaPart, disappearingSetting, mediaHashID, err := c.mediaToMatrix(ctx, portal, intent, msg)
-	if err != nil {
-		return nil, err
-	} else if mediaPart != nil {
+	mediaPart, disappearingSetting, mediaHashID := c.mediaToMatrix(ctx, portal, intent, msg)
+	if mediaPart != nil {
 		hasher.Write(mediaHashID)
 		cm.Parts = append(cm.Parts, mediaPart)
 		cm.MergeCaption()
@@ -283,9 +232,9 @@ func (c *TelegramClient) convertToMatrix(ctx context.Context, portal *bridgev2.P
 	return
 }
 
-func (t *TelegramClient) parseBodyAndHTML(ctx context.Context, message string, entities []tg.MessageEntityClass) (*event.MessageEventContent, error) {
+func (t *TelegramClient) parseBodyAndHTML(ctx context.Context, message string, entities []tg.MessageEntityClass) *event.MessageEventContent {
 	if len(entities) == 0 {
-		return &event.MessageEventContent{MsgType: event.MsgText, Body: message}, nil
+		return &event.MessageEventContent{MsgType: event.MsgText, Body: message}
 	}
 
 	var customEmojiIDs []int64
@@ -297,7 +246,9 @@ func (t *TelegramClient) parseBodyAndHTML(ctx context.Context, message string, e
 	}
 	customEmojis, err := t.transferEmojisToMatrix(ctx, customEmojiIDs)
 	if err != nil {
-		return nil, err
+		zerolog.Ctx(ctx).Err(err).
+			Ints64("emoji_ids", customEmojiIDs).
+			Msg("Failed to transfer custom emojis to Matrix")
 	}
 	return telegramfmt.Parse(ctx, message, entities, t.telegramFmtParams.WithCustomEmojis(customEmojis))
 }
@@ -335,7 +286,14 @@ func (c *TelegramClient) webpageToBeeperLinkPreview(ctx context.Context, portal 
 	return preview, nil
 }
 
-func (c *TelegramClient) convertMediaRequiringUpload(ctx context.Context, portal *bridgev2.Portal, intent bridgev2.MatrixAPI, msgID int, msgMedia tg.MessageMediaClass) (*bridgev2.ConvertedMessagePart, *database.DisappearingSetting, error) {
+func (c *TelegramClient) convertMediaRequiringUpload(
+	ctx context.Context,
+	portal *bridgev2.Portal,
+	intent bridgev2.MatrixAPI,
+	msgID int,
+	msgMedia tg.MessageMediaClass,
+	allowRefetch bool,
+) (converted *bridgev2.ConvertedMessagePart, disappearingSetting *database.DisappearingSetting) {
 	log := zerolog.Ctx(ctx).With().
 		Str("conversion_direction", "to_matrix").
 		Str("portal_id", string(portal.ID)).
@@ -350,7 +308,6 @@ func (c *TelegramClient) convertMediaRequiringUpload(ctx context.Context, portal
 	transferer := media.NewTransferer(c.client.API()).WithRoomID(portal.MXID)
 	var mediaTransferer *media.ReadyTransferer
 
-	var disappearingSetting *database.DisappearingSetting
 	if t, ok := msgMedia.(ttlable); ok {
 		if ttl, ok := t.GetTTLSeconds(); ok {
 			typeName := "photo"
@@ -363,24 +320,15 @@ func (c *TelegramClient) convertMediaRequiringUpload(ctx context.Context, portal
 				ttl = 15
 
 				if c.main.Config.DisableViewOnce {
-					return &bridgev2.ConvertedMessagePart{
+					converted = &bridgev2.ConvertedMessagePart{
 						Type: event.EventMessage,
 						Content: &event.MessageEventContent{
 							MsgType: event.MsgNotice,
 							Body:    fmt.Sprintf("You received a view once %s. For added privacy, you can only open it on the Telegram app.", typeName),
 						},
-					}, nil, nil
+					}
+					return
 				}
-			}
-
-			if c.main.Config.DisableDisappearing {
-				return &bridgev2.ConvertedMessagePart{
-					Type: event.EventMessage,
-					Content: &event.MessageEventContent{
-						MsgType: event.MsgNotice,
-						Body:    fmt.Sprintf("You received a disappearing %s. For added privacy, you can only open it on the Telegram app.", typeName),
-					},
-				}, nil, nil
 			}
 
 			disappearingSetting = &database.DisappearingSetting{
@@ -402,14 +350,28 @@ func (c *TelegramClient) convertMediaRequiringUpload(ctx context.Context, portal
 		}
 		photo, ok := msgMedia.Photo.(*tg.Photo)
 		if !ok {
-			return nil, nil, fmt.Errorf("unrecognized photo type %T", msgMedia.Photo)
+			converted = &bridgev2.ConvertedMessagePart{
+				Type: event.EventMessage,
+				Content: &event.MessageEventContent{
+					MsgType: event.MsgNotice,
+					Body:    "Unsupported photo message. Check Telegram app.",
+				},
+			}
+			return
 		}
 		telegramMediaID = photo.GetID()
 		mediaTransferer = transferer.WithPhoto(photo)
 	case *tg.MessageMediaDocument:
 		document, ok := msgMedia.Document.(*tg.Document)
 		if !ok {
-			return nil, nil, fmt.Errorf("unrecognized document type %T", msgMedia.Document)
+			converted = &bridgev2.ConvertedMessagePart{
+				Type: event.EventMessage,
+				Content: &event.MessageEventContent{
+					MsgType: event.MsgNotice,
+					Body:    "Unsupported document message. Check Telegram app.",
+				},
+			}
+			return
 		}
 		telegramMediaID = document.GetID()
 
@@ -522,37 +484,65 @@ func (c *TelegramClient) convertMediaRequiringUpload(ctx context.Context, portal
 			if c.main.useDirectMedia {
 				thumbnailURL, thumbnailInfo, err = thumbnailTransferer.DirectDownloadURL(ctx, c.telegramUserID, portal, msgID, true, document.ID)
 				if err != nil {
-					log.Err(err).Msg("error getting direct download URL for thumbnail")
+					log.Err(err).Msg("Failed to create direct download URL for thumbnail")
 				}
 			}
 			if thumbnailURL == "" {
 				thumbnailURL, thumbnailFile, thumbnailInfo, err = thumbnailTransferer.Transfer(ctx, c.main.Store, intent)
 				if err != nil {
-					return nil, nil, fmt.Errorf("error transferring thumbnail: %w", err)
+					log.Err(err).Msg("Failed to transfer thumbnail")
 				}
 			}
-
-			transferer = transferer.WithThumbnail(thumbnailURL, thumbnailFile, thumbnailInfo)
+			if thumbnailURL != "" || thumbnailFile != nil {
+				transferer = transferer.WithThumbnail(thumbnailURL, thumbnailFile, thumbnailInfo)
+			}
 		}
 
 		mediaTransferer = transferer.
 			WithFilename(content.Body).
 			WithDocument(msgMedia.Document, false)
 	default:
-		return nil, nil, fmt.Errorf("unhandled media type %T", msgMedia)
+		converted = &bridgev2.ConvertedMessagePart{
+			Type: event.EventMessage,
+			Content: &event.MessageEventContent{
+				MsgType: event.MsgNotice,
+				Body:    "Unsupported media message. Check Telegram app.",
+			},
+		}
+		return
 	}
 
 	var err error
 	if c.main.useDirectMedia && (!isSticker || c.main.Config.AnimatedSticker.Target == "disable") {
 		content.URL, content.Info, err = mediaTransferer.DirectDownloadURL(ctx, c.telegramUserID, portal, msgID, false, telegramMediaID)
 		if err != nil {
-			log.Err(err).Msg("error getting direct download URL for media")
+			log.Err(err).Msg("Failed to create direct download URL for media")
 		}
 	}
 	if content.URL == "" {
 		content.URL, content.File, content.Info, err = mediaTransferer.Transfer(ctx, c.main.Store, intent)
 		if err != nil {
-			return nil, nil, fmt.Errorf("error transferring media: %w", err)
+			if tgerr.Is(err, tg.ErrFileReferenceExpired) && allowRefetch {
+				log.Warn().Err(err).Msg("Failed to transfer media, trying to refetch from message")
+				peerType, peerID, err := ids.ParsePortalID(portal.ID)
+				if err != nil {
+					log.Err(err).Msg("Failed to parse portal ID to refetch media")
+				} else if msgMedia, err = c.refetchMedia(ctx, peerType, peerID, msgID); err != nil {
+					log.Err(err).Msg("Failed to refetch media after file reference expired error")
+				} else {
+					return c.convertMediaRequiringUpload(ctx, portal, intent, msgID, msgMedia, false)
+				}
+			} else {
+				log.Err(err).Msg("Failed to transfer media")
+			}
+			converted = &bridgev2.ConvertedMessagePart{
+				Type: event.EventMessage,
+				Content: &event.MessageEventContent{
+					MsgType: event.MsgNotice,
+					Body:    "Failed to transfer media. Check Telegram app.",
+				},
+			}
+			return
 		}
 		if msgMedia.TypeID() == tg.MessageMediaPhotoTypeID {
 			content.Body = content.Body + exmime.ExtensionFromMimetype(content.Info.MimeType)
@@ -572,11 +562,12 @@ func (c *TelegramClient) convertMediaRequiringUpload(ctx context.Context, portal
 		info["fi.mau.telegram.spoiler"] = true
 	}
 
-	return &bridgev2.ConvertedMessagePart{
+	converted = &bridgev2.ConvertedMessagePart{
 		Type:    eventType,
 		Content: &content,
 		Extra:   extra,
-	}, disappearingSetting, nil
+	}
+	return
 }
 
 func (c *TelegramClient) convertContact(media tg.MessageMediaClass) *bridgev2.ConvertedMessagePart {
@@ -617,10 +608,16 @@ type hasGeo interface {
 	GetGeo() tg.GeoPointClass
 }
 
-func convertLocation(media tg.MessageMediaClass) (*bridgev2.ConvertedMessagePart, error) {
+func convertLocation(media tg.MessageMediaClass) *bridgev2.ConvertedMessagePart {
 	g, ok := media.(hasGeo)
 	if !ok || g.GetGeo().TypeID() != tg.GeoPointTypeID {
-		return nil, fmt.Errorf("location didn't have geo or geo is wrong type")
+		return &bridgev2.ConvertedMessagePart{
+			Type: event.EventMessage,
+			Content: &event.MessageEventContent{
+				MsgType: event.MsgNotice,
+				Body:    "Unsupported location message. Check Telegram app.",
+			},
+		}
 	}
 	point := g.GetGeo().(*tg.GeoPoint)
 	var longChar, latChar string
@@ -667,7 +664,7 @@ func convertLocation(media tg.MessageMediaClass) (*bridgev2.ConvertedMessagePart
 			FormattedBody: fmt.Sprintf(`%s: <a href="%s">%s</a>`, note, url, body),
 		},
 		Extra: extra,
-	}, nil
+	}
 }
 
 func convertPoll(media tg.MessageMediaClass) *bridgev2.ConvertedMessagePart {

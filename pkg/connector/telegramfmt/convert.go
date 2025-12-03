@@ -63,7 +63,7 @@ func (ctx formatContext) TextToHTML(text string) string {
 	return event.TextToHTML(text)
 }
 
-func Parse(ctx context.Context, message string, entities []tg.MessageEntityClass, params FormatParams) (*event.MessageEventContent, error) {
+func Parse(ctx context.Context, message string, entities []tg.MessageEntityClass, params FormatParams) *event.MessageEventContent {
 	log := zerolog.Ctx(ctx).With().Str("func", "Parse").Logger()
 	content := &event.MessageEventContent{
 		MsgType:  event.MsgText,
@@ -71,7 +71,7 @@ func Parse(ctx context.Context, message string, entities []tg.MessageEntityClass
 		Mentions: &event.Mentions{},
 	}
 	if len(entities) == 0 {
-		return content, nil
+		return content
 	}
 
 	lrt := &LinkedRangeTree{}
@@ -142,5 +142,5 @@ func Parse(ctx context.Context, message string, entities []tg.MessageEntityClass
 	content.Mentions.UserIDs = maps.Keys(mentions)
 	content.FormattedBody = lrt.Format(utf16Message, formatContext{})
 	content.Format = event.FormatHTML
-	return content, nil
+	return content
 }

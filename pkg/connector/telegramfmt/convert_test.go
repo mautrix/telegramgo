@@ -22,7 +22,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"maunium.net/go/mautrix/event"
 	"maunium.net/go/mautrix/id"
 
@@ -75,8 +74,7 @@ func TestParse(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			parsed, err := telegramfmt.Parse(context.TODO(), test.ins, test.ine, formatParams)
-			require.NoError(t, err)
+			parsed := telegramfmt.Parse(context.TODO(), test.ins, test.ine, formatParams)
 			assert.Equal(t, test.body, parsed.Body)
 			assert.Equal(t, test.html, parsed.FormattedBody)
 		})

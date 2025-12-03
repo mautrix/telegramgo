@@ -21,13 +21,13 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net/http"
+	"os"
 
 	"github.com/rs/zerolog"
-	"go.mau.fi/util/gnuzip"
 	"maunium.net/go/mautrix/bridgev2"
 	"maunium.net/go/mautrix/event"
 	"maunium.net/go/mautrix/id"
+	"maunium.net/go/mautrix/mediaproxy"
 
 	"go.mau.fi/mautrix-telegram/pkg/connector/ids"
 	"go.mau.fi/mautrix-telegram/pkg/connector/store"
@@ -137,16 +137,6 @@ func (t *Transferer) WithFilename(filename string) *Transferer {
 // WithStickerConfig sets the animated sticker config for the [Transferer].
 func (t *Transferer) WithStickerConfig(cfg AnimatedStickerConfig) *Transferer {
 	t.animatedStickerConfig = &cfg
-	switch cfg.Target {
-	case "png":
-		t.fileInfo.MimeType = "image/png"
-	case "gif":
-		t.fileInfo.MimeType = "image/gif"
-	case "webp":
-		t.fileInfo.MimeType = "image/webp"
-	case "webm":
-		t.fileInfo.MimeType = "video/webm"
-	}
 	return t
 }
 
@@ -278,42 +268,61 @@ func (t *ReadyTransferer) Transfer(ctx context.Context, store *store.Container, 
 		return "", nil, nil, fmt.Errorf("downloading file failed: %w", err)
 	}
 
-	if t.inner.animatedStickerConfig != nil && t.inner.fileInfo.MimeType == "application/x-tgsticker" {
-		data, err := io.ReadAll(reader)
-		if err != nil {
-			return "", nil, nil, fmt.Errorf("reading sticker data failed: %w", err)
-		}
-		converted := t.inner.animatedStickerConfig.convert(ctx, data)
-		reader = converted.DataWriter
-		t.inner.fileInfo.MimeType = converted.MIMEType
-		t.inner.fileInfo.Width = converted.Width
-		t.inner.fileInfo.Height = converted.Height
-		t.inner.fileInfo.Size = converted.Size
+	needStickerConvert := t.inner.animatedStickerConfig != nil && (t.inner.fileInfo.MimeType == "application/x-tgsticker" ||
+		(t.inner.fileInfo.MimeType == "video/webm" && t.inner.animatedStickerConfig.ConvertFromWebm && t.inner.animatedStickerConfig.Target != "webm"))
 
-		if len(converted.ThumbnailData) > 0 {
-			thumbnailMXC, thumbnailFileInfo, err := intent.UploadMedia(ctx, t.inner.roomID, converted.ThumbnailData, t.inner.filename, converted.ThumbnailMIMEType)
+	var thumbnailData []byte
+	var thumbnailMIMEType string
+	mxc, encryptedFileInfo, err = intent.UploadMediaStream(ctx, t.inner.roomID, int64(t.inner.fileInfo.Size), needStickerConvert, func(file io.Writer) (*bridgev2.FileStreamResult, error) {
+		_, err := io.Copy(file, reader)
+		if err != nil {
+			return nil, fmt.Errorf("failed to stream download: %w", err)
+		}
+		var replacementFile string
+		if needStickerConvert {
+			osFile := file.(*os.File)
+			_, err = osFile.Seek(0, io.SeekStart)
 			if err != nil {
-				log.Err(err).Msg("failed to upload animated sticker thumbnail to Matrix")
+				return nil, fmt.Errorf("failed to seek to start of file for sticker conversion: %w", err)
+			}
+			var converted *ConvertedSticker
+			if t.inner.fileInfo.MimeType == "video/webm" {
+				converted = t.inner.animatedStickerConfig.convertWebm(ctx, osFile)
 			} else {
-				t.inner = t.inner.WithThumbnail(thumbnailMXC, thumbnailFileInfo, &event.FileInfo{
-					MimeType: converted.ThumbnailMIMEType,
-					Width:    converted.Width,
-					Height:   converted.Height,
-					Size:     len(converted.ThumbnailData),
-				})
+				t.inner.fileInfo.MimeType = "video/lottie+json"
+				converted = t.inner.animatedStickerConfig.convert(ctx, osFile)
+			}
+			if converted != nil {
+				replacementFile = converted.NewPath
+				t.inner.fileInfo.MimeType = converted.MIMEType
+				t.inner.fileInfo.Width = converted.Width
+				t.inner.fileInfo.Height = converted.Height
+				t.inner.fileInfo.Size = converted.Size
+				thumbnailData = converted.ThumbnailData
+				thumbnailMIMEType = converted.ThumbnailMIMEType
 			}
 		}
-	}
-
-	mxc, encryptedFileInfo, err = intent.UploadMediaStream(ctx, t.inner.roomID, int64(t.inner.fileInfo.Size), false, func(file io.Writer) (*bridgev2.FileStreamResult, error) {
-		_, err := io.Copy(file, reader)
 		return &bridgev2.FileStreamResult{
-			FileName: t.inner.filename,
-			MimeType: t.inner.fileInfo.MimeType,
+			FileName:        t.inner.filename,
+			MimeType:        t.inner.fileInfo.MimeType,
+			ReplacementFile: replacementFile,
 		}, err
 	})
 	if err != nil {
 		return "", nil, nil, fmt.Errorf("failed to upload media to Matrix: %w", err)
+	}
+	if thumbnailData != nil {
+		thumbnailMXC, thumbnailFileInfo, err := intent.UploadMedia(ctx, t.inner.roomID, thumbnailData, t.inner.filename, thumbnailMIMEType)
+		if err != nil {
+			log.Err(err).Msg("failed to upload animated sticker thumbnail to Matrix")
+		} else {
+			t.inner = t.inner.WithThumbnail(thumbnailMXC, thumbnailFileInfo, &event.FileInfo{
+				MimeType: thumbnailMIMEType,
+				Width:    t.inner.fileInfo.Width,
+				Height:   t.inner.fileInfo.Height,
+				Size:     len(thumbnailData),
+			})
+		}
 	}
 
 	// If it's an unencrypted file, cache the MXC URI corresponding to the
@@ -338,7 +347,7 @@ func (t *ReadyTransferer) Stream(ctx context.Context) (r io.Reader, mimeType str
 	if err != nil {
 		return nil, "", 0, err
 	}
-	if t.inner.fileInfo.MimeType == "" {
+	if t.inner.fileInfo.MimeType == "" || t.inner.fileInfo.MimeType == "application/octet-stream" {
 		switch storageFileTypeClass.(type) {
 		case *tg.StorageFileJpeg:
 			t.inner.fileInfo.MimeType = "image/jpeg"
@@ -349,7 +358,7 @@ func (t *ReadyTransferer) Stream(ctx context.Context) (r io.Reader, mimeType str
 		case *tg.StorageFilePdf:
 			t.inner.fileInfo.MimeType = "application/pdf"
 		case *tg.StorageFileMp3:
-			t.inner.fileInfo.MimeType = "audio/mp3"
+			t.inner.fileInfo.MimeType = "audio/mpeg"
 		case *tg.StorageFileMov:
 			t.inner.fileInfo.MimeType = "video/quicktime"
 		case *tg.StorageFileMp4:
@@ -361,24 +370,58 @@ func (t *ReadyTransferer) Stream(ctx context.Context) (r io.Reader, mimeType str
 		}
 	}
 
+	return r, t.inner.fileInfo.MimeType, t.inner.fileInfo.Size, nil
+}
+
+func (t *ReadyTransferer) ToDirectMediaResponse(ctx context.Context) (mediaproxy.GetMediaResponse, error) {
+	if t == nil {
+		return nil, fmt.Errorf("invalid direct media request")
+	}
+	log := zerolog.Ctx(ctx)
+	r, mimeType, size, err := t.Stream(ctx)
+	if err != nil {
+		log.Err(err).Msg("Failed to download media")
+		return nil, err
+	}
+	log.Debug().
+		Str("mime_type", mimeType).
+		Int("size", size).
+		Msg("Started downloading media successfully")
+
 	if t.inner.animatedStickerConfig != nil {
-		data, err := io.ReadAll(r)
-		if err != nil {
-			return nil, "", 0, fmt.Errorf("failed to read animated sticker data: %w", err)
-		} else if detected := http.DetectContentType(data); detected == "application/x-tgsticker" || detected == "application/x-gzip" {
-			if unzipped, err := gnuzip.MaybeGUnzip(data); err != nil {
-				zerolog.Ctx(ctx).Err(err).Msg("failed to unzip animated sticker")
-			} else {
-				converted := t.inner.animatedStickerConfig.convert(ctx, unzipped)
-				t.inner.fileInfo.MimeType = converted.MIMEType
-				t.inner.fileInfo.Size = converted.Size
-				return converted.DataWriter, t.inner.fileInfo.MimeType, t.inner.fileInfo.Size, nil
-			}
-		}
-		return bytes.NewReader(data), t.inner.fileInfo.MimeType, t.inner.fileInfo.Size, nil
+		return &mediaproxy.GetMediaResponseFile{
+			Callback: func(w *os.File) (*mediaproxy.FileMeta, error) {
+				_, err = io.Copy(w, r)
+				if err != nil {
+					return nil, fmt.Errorf("failed to write animated sticker data to file: %w", err)
+				}
+				_, err = w.Seek(0, io.SeekStart)
+				if err != nil {
+					return nil, fmt.Errorf("failed to seek to start of file for sticker conversion: %w", err)
+				}
+				var converted *ConvertedSticker
+				if t.inner.fileInfo.MimeType == "video/webm" {
+					converted = t.inner.animatedStickerConfig.convertWebm(ctx, w)
+				} else {
+					t.inner.fileInfo.MimeType = "video/lottie+json"
+					converted = t.inner.animatedStickerConfig.convert(ctx, w)
+				}
+				if converted == nil {
+					return &mediaproxy.FileMeta{ContentType: t.inner.fileInfo.MimeType}, nil
+				}
+				return &mediaproxy.FileMeta{
+					ContentType:     converted.MIMEType,
+					ReplacementFile: converted.NewPath,
+				}, nil
+			},
+		}, nil
 	}
 
-	return r, t.inner.fileInfo.MimeType, t.inner.fileInfo.Size, nil
+	return &mediaproxy.GetMediaResponseData{
+		Reader:        io.NopCloser(r),
+		ContentType:   mimeType,
+		ContentLength: int64(size),
+	}, nil
 }
 
 // DownloadBytes downloads the media from Telegram to a byte buffer.

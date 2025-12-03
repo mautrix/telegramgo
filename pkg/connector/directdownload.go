@@ -19,7 +19,6 @@ package connector
 import (
 	"context"
 	"fmt"
-	"io"
 
 	"github.com/rs/zerolog"
 	"maunium.net/go/mautrix"
@@ -226,26 +225,7 @@ func (tc *TelegramConnector) Download(ctx context.Context, mediaID networkid.Med
 			WithDocument(customEmojiDocuments[0], false)
 	}
 
-	if readyTransferer == nil {
-		return nil, fmt.Errorf("invalid combination of direct media keys")
-	}
-
-	r, mimeType, size, err := readyTransferer.Stream(ctx)
-	if err != nil {
-		log.Err(err).Msg("failed to download media")
-		return nil, err
-	}
-
-	log.Debug().
-		Str("mime_type", mimeType).
-		Int("size", size).
-		Msg("Downloaded media successfully")
-
-	return &mediaproxy.GetMediaResponseData{
-		Reader:        io.NopCloser(r),
-		ContentType:   mimeType,
-		ContentLength: int64(size),
-	}, nil
+	return readyTransferer.ToDirectMediaResponse(ctx)
 }
 
 func (tg *TelegramConnector) SetUseDirectMedia() {

@@ -57,15 +57,20 @@ func mediaHashID(ctx context.Context, m tg.MessageMediaClass) []byte {
 	}
 	switch media := m.(type) {
 	case *tg.MessageMediaPhoto:
-		if media != nil && media.Photo != nil {
+		if media.Photo != nil {
 			return binary.BigEndian.AppendUint64(nil, uint64(media.Photo.GetID()))
+		} else {
+			zerolog.Ctx(ctx).Debug().Msg("Attempted to get hash for nil photo")
 		}
 	case *tg.MessageMediaDocument:
-		if media != nil && media.Document != nil {
+		if media.Document != nil {
 			return binary.BigEndian.AppendUint64(nil, uint64(media.Document.GetID()))
+		} else {
+			zerolog.Ctx(ctx).Debug().Msg("Attempted to get hash for nil document")
 		}
+	default:
+		zerolog.Ctx(ctx).Debug().Type("media_type", m).Msg("Attempted to get hash for unsupported media type ID")
 	}
-	zerolog.Ctx(ctx).Error().Type("media_type", m).Msg("Attempted to get hash for unsupported media type ID")
 	return nil
 }
 

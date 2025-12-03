@@ -204,7 +204,7 @@ func (t *TelegramClient) avatarFromPhoto(ctx context.Context, peerType ids.PeerT
 		zerolog.Ctx(ctx).Trace().Msg("Chat photo is nil, returning no avatar")
 		return nil
 	} else if photo.TypeID() != tg.PhotoTypeID {
-		zerolog.Ctx(ctx).Warn().Uint32("type_id", photo.TypeID()).Msg("Chat photo type unknown, returning no avatar")
+		zerolog.Ctx(ctx).Debug().Str("type_name", photo.TypeName()).Msg("Chat photo type unknown, returning no avatar")
 		return nil
 	}
 	avatar, err := t.convertPhoto(ctx, peerType, peerID, photo)

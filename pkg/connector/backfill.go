@@ -296,7 +296,7 @@ func (t *TelegramClient) FetchMessages(ctx context.Context, fetchParams bridgev2
 
 		message, ok := msg.(*tg.Message)
 		if !ok {
-			log.Warn().Str("type", msg.TypeName()).Msg("skipping backfilling unsupported message type")
+			log.Debug().Str("type", msg.TypeName()).Msg("skipping backfilling unsupported message type")
 			continue
 		}
 

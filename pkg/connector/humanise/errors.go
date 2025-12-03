@@ -74,6 +74,8 @@ func Error(err error) string {
 		return "The command description was empty, too long or had invalid characters used"
 	case tgerr.Is(err, "BOT_COMMAND_INVALID"):
 		return "The specified command is invalid"
+	case tgerr.Is(err, "BOT_COMMANDS_TOO_MUCH"):
+		return "The provided commands are too many"
 	case tgerr.Is(err, "BOT_DOMAIN_INVALID"):
 		return "The domain used for the auth button does not match the one configured in @BotFather"
 	case tgerr.Is(err, "BOT_GAMES_DISABLED"):
@@ -364,6 +366,8 @@ func Error(err error) string {
 		return "A wait of {seconds} seconds is required in the test servers"
 	case tgerr.Is(err, "FLOOD_WAIT_X"):
 		return "A wait of {seconds} seconds is required"
+	case tgerr.Is(err, "FLOOD_PREMIUM_WAIT_X"):
+		return "A wait of {seconds} seconds is required in non-premium accounts"
 	case tgerr.Is(err, "FOLDER_ID_EMPTY"):
 		return "The folder you tried to delete was already empty"
 	case tgerr.Is(err, "FOLDER_ID_INVALID"):
@@ -531,7 +535,7 @@ func Error(err error) string {
 	case tgerr.Is(err, "MESSAGE_POLL_CLOSED"):
 		return "The poll was closed and can no longer be voted on"
 	case tgerr.Is(err, "MESSAGE_TOO_LONG"):
-		return "Message was too long. Current maximum length is 4096 UTF-8 characters"
+		return "Message was too long"
 	case tgerr.Is(err, "METHOD_INVALID"):
 		return "The API method is invalid and cannot be used"
 	case tgerr.Is(err, "MIN_DATE_INVALID"):
@@ -1054,6 +1058,10 @@ func Error(err error) string {
 		return "Telegram workers are too busy to respond immediately"
 	case tgerr.Is(err, "YOU_BLOCKED_USER"):
 		return "You blocked this user"
+	case tgerr.Is(err, "FROZEN_METHOD_INVALID"):
+		return "You tried to use a method that is not available for frozen accounts"
+	case tgerr.Is(err, "FROZEN_PARTICIPANT_MISSING"):
+		return "Your account is frozen and can't access the chat"
 	}
 	return err.Error()
 }

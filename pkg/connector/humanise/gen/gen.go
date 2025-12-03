@@ -28,9 +28,7 @@ import (
 )
 
 func main() {
-	currentDir := exerrors.Must(os.Getwd())
-
-	errorCSV := exerrors.Must(os.Open(currentDir + "/../../internal/gen/errors.csv"))
+	errorCSV := exerrors.Must(os.Open("gen/errors.csv"))
 	reader := csv.NewReader(errorCSV)
 	var data bytes.Buffer
 	data.WriteString("package humanise\n")
@@ -62,5 +60,5 @@ func main() {
 	data.WriteString("return err.Error()")
 	data.WriteString("}")
 
-	exerrors.PanicIfNotNil(os.WriteFile(currentDir+"/errors.go", data.Bytes(), os.ModePerm))
+	exerrors.PanicIfNotNil(os.WriteFile("errors.go", data.Bytes(), os.ModePerm))
 }

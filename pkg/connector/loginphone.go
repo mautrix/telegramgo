@@ -84,7 +84,7 @@ func (p *PhoneLogin) SubmitUserInput(ctx context.Context, input map[string]strin
 		p.phone = phone
 		p.authClient = telegram.NewClient(p.main.Config.APIID, p.main.Config.APIHash, telegram.Options{
 			CustomSessionStorage: &p.authData,
-			Logger:               zap.New(zerozap.New(zerolog.Ctx(ctx).With().Str("component", "telegram_phone_login_client").Logger())),
+			Logger:               zap.New(zerozap.NewWithLevels(zerolog.Ctx(ctx).With().Str("component", "telegram_phone_login_client").Logger(), zapLevelMap)),
 			Device:               p.main.deviceConfig(),
 		})
 

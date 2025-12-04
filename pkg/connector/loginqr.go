@@ -76,7 +76,7 @@ func (q *QRLogin) Start(ctx context.Context) (*bridgev2.LoginStep, error) {
 		loggedIn <- struct{}{}
 		return nil
 	})
-	zaplog := zap.New(zerozap.New(log))
+	zaplog := zap.New(zerozap.NewWithLevels(log, zapLevelMap))
 	updateManager := updates.New(updates.Config{
 		Handler: dispatcher,
 		Logger:  zaplog.Named("login_update_manager"),

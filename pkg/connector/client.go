@@ -149,6 +149,19 @@ func (tg *TelegramConnector) deviceConfig() telegram.DeviceConfig {
 	}
 }
 
+var zapLevelMap = map[zapcore.Level]zerolog.Level{
+	// shifted
+	zapcore.DebugLevel: zerolog.TraceLevel,
+	zapcore.InfoLevel:  zerolog.DebugLevel,
+
+	// direct mapping
+	zapcore.WarnLevel:   zerolog.WarnLevel,
+	zapcore.ErrorLevel:  zerolog.ErrorLevel,
+	zapcore.DPanicLevel: zerolog.PanicLevel,
+	zapcore.PanicLevel:  zerolog.PanicLevel,
+	zapcore.FatalLevel:  zerolog.FatalLevel,
+}
+
 func NewTelegramClient(ctx context.Context, tc *TelegramConnector, login *bridgev2.UserLogin) (*TelegramClient, error) {
 	telegramUserID, err := ids.ParseUserLoginID(login.ID)
 	if err != nil {
@@ -160,18 +173,7 @@ func NewTelegramClient(ctx context.Context, tc *TelegramConnector, login *bridge
 		Str("user_login_id", string(login.ID)).
 		Logger()
 
-	zaplog := zap.New(zerozap.NewWithLevels(log, map[zapcore.Level]zerolog.Level{
-		// shifted
-		zapcore.DebugLevel: zerolog.TraceLevel,
-		zapcore.InfoLevel:  zerolog.DebugLevel,
-
-		// direct mapping
-		zapcore.WarnLevel:   zerolog.WarnLevel,
-		zapcore.ErrorLevel:  zerolog.ErrorLevel,
-		zapcore.DPanicLevel: zerolog.PanicLevel,
-		zapcore.PanicLevel:  zerolog.PanicLevel,
-		zapcore.FatalLevel:  zerolog.FatalLevel,
-	}))
+	zaplog := zap.New(zerozap.NewWithLevels(log, zapLevelMap))
 
 	client := TelegramClient{
 		ScopedStore: tc.Store.GetScopedStore(telegramUserID),

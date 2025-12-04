@@ -227,7 +227,7 @@ var ErrNoAccessHash = errors.New("access hash not found")
 func (s *ScopedStore) GetAccessHash(ctx context.Context, entityType ids.PeerType, entityID int64) (accessHash int64, err error) {
 	err = s.db.QueryRow(ctx, getAccessHashQuery, s.telegramUserID, entityType, entityID).Scan(&accessHash)
 	if errors.Is(err, sql.ErrNoRows) {
-		err = ErrNoAccessHash
+		err = fmt.Errorf("%w for %d", ErrNoAccessHash, entityID)
 	}
 	return
 }

@@ -128,7 +128,7 @@ func finalizeLogin(ctx context.Context, user *bridgev2.User, authorization *tg.A
 		}
 	}()
 
-	ul.RemoteProfile, ul.RemoteName = userToRemoteProfile(me)
+	ul.RemoteProfile, ul.RemoteName = userToRemoteProfile(me, nil, nil)
 	err = ul.Save(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to save login: %w", err)

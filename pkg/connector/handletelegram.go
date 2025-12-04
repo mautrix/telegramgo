@@ -659,52 +659,6 @@ func (t *TelegramClient) getPeerSender(peer tg.PeerClass) bridgev2.EventSender {
 	}
 }
 
-func (t *TelegramClient) maybeUpdateRemoteProfile(ctx context.Context, ghost *bridgev2.Ghost, user *tg.User) error {
-	if ghost.ID != t.userID {
-		return nil
-	}
-
-	var changed bool
-	if user != nil {
-		fullName := util.FormatFullName(user.FirstName, user.LastName, user.Deleted, user.ID)
-		username := user.Username
-		if username == "" && len(user.Usernames) > 0 {
-			username = user.Usernames[0].Username
-		}
-
-		normalizedPhone := "+" + strings.TrimPrefix(user.Phone, "+")
-		remoteName := username
-		if remoteName == "" {
-			remoteName = normalizedPhone
-		}
-		if remoteName == "" {
-			remoteName = fullName
-		}
-
-		changed = t.userLogin.RemoteName != remoteName ||
-			t.userLogin.RemoteProfile.Phone != normalizedPhone ||
-			t.userLogin.RemoteProfile.Username != username ||
-			t.userLogin.RemoteProfile.Name != fullName
-		t.userLogin.RemoteName = remoteName
-		t.userLogin.RemoteProfile.Phone = normalizedPhone
-		t.userLogin.RemoteProfile.Username = username
-		t.userLogin.RemoteProfile.Name = fullName
-	} else {
-		changed = t.userLogin.RemoteName != ghost.Name
-		t.userLogin.RemoteProfile.Name = ghost.Name
-	}
-
-	changed = changed || t.userLogin.RemoteProfile.Avatar != ghost.AvatarMXC
-	t.userLogin.RemoteProfile.Avatar = ghost.AvatarMXC
-	if changed {
-		if err := t.userLogin.Save(ctx); err != nil {
-			return err
-		}
-		t.userLogin.BridgeState.Send(status.BridgeState{StateEvent: status.StateConnected})
-	}
-	return nil
-}
-
 func (t *TelegramClient) onUserName(ctx context.Context, e tg.Entities, update *tg.UpdateUserName) error {
 	ghost, err := t.main.Bridge.GetGhostByID(ctx, ids.MakeUserID(update.UserID))
 	if err != nil {
@@ -734,7 +688,22 @@ func (t *TelegramClient) onUserName(ctx context.Context, e tg.Entities, update *
 	}
 
 	ghost.UpdateInfo(ctx, &userInfo)
-	return t.maybeUpdateRemoteProfile(ctx, ghost, nil)
+	if ghost.ID == t.userID {
+		var firstUsername string
+		if len(update.Usernames) > 0 {
+			firstUsername = update.Usernames[0].Username
+		}
+		t.updateRemoteProfile(ctx, &tg.User{
+			Self:      true,
+			ID:        update.UserID,
+			FirstName: update.FirstName,
+			LastName:  update.LastName,
+			Username:  firstUsername,
+			Usernames: update.Usernames,
+		}, ghost)
+	}
+
+	return nil
 }
 
 func (t *TelegramClient) onDeleteMessages(ctx context.Context, channelID int64, update IGetMessages) error {
@@ -783,12 +752,17 @@ func (t *TelegramClient) updateGhost(ctx context.Context, userID int64, user *tg
 	if err != nil {
 		return nil, err
 	}
-	userInfo, err := t.getUserInfoFromTelegramUser(ctx, user)
+	userInfo, err := t.wrapUserInfo(ctx, user)
 	if err != nil {
 		return nil, err
 	}
 	ghost.UpdateInfo(ctx, userInfo)
-	return userInfo, t.maybeUpdateRemoteProfile(ctx, ghost, user)
+
+	if ghost.ID == t.userID && t.updateRemoteProfile(ctx, user, ghost) {
+		t.userLogin.BridgeState.Send(status.BridgeState{StateEvent: status.StateConnected})
+	}
+
+	return userInfo, nil
 }
 
 func (t *TelegramClient) updateChannel(ctx context.Context, channel *tg.Channel) (*bridgev2.UserInfo, error) {

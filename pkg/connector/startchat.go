@@ -41,7 +41,7 @@ var (
 
 func (t *TelegramClient) getResolveIdentifierResponseForUser(ctx context.Context, user tg.UserClass) (*bridgev2.ResolveIdentifierResponse, error) {
 	networkUserID := ids.MakeUserID(user.GetID())
-	if userInfo, err := t.getUserInfoFromTelegramUser(ctx, user); err != nil {
+	if userInfo, err := t.wrapUserInfo(ctx, user); err != nil {
 		return nil, fmt.Errorf("failed to get user info: %w", err)
 	} else if ghost, err := t.main.Bridge.GetGhostByID(ctx, networkUserID); err != nil {
 		return nil, fmt.Errorf("failed to get ghost: %w", err)
@@ -88,7 +88,7 @@ func (t *TelegramClient) getResolveIdentifierResponseForUserID(ctx context.Conte
 // - Usernames must start with a letter
 // - Usernames must contain only letters, numbers, and underscores
 // - Usernames cannot end with an underscore
-var usernameRe = regexp.MustCompile(`^@?([a-zA-Z](?:\w{3,30})[a-zA-Z\d])$`)
+var usernameRe = regexp.MustCompile(`^@?([a-zA-Z]\w{3,30}[a-zA-Z\d])$`)
 
 func (t *TelegramClient) ResolveIdentifier(ctx context.Context, identifier string, createChat bool) (*bridgev2.ResolveIdentifierResponse, error) {
 	log := zerolog.Ctx(ctx).With().Str("identifier", identifier).Logger()

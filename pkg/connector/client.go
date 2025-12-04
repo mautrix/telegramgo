@@ -450,31 +450,57 @@ func (t *TelegramClient) onPing() {
 	}
 }
 
-func userToRemoteProfile(self *tg.User) (profile status.RemoteProfile, name string) {
+func userToRemoteProfile(
+	self *tg.User,
+	ghost *bridgev2.Ghost,
+	prevState *status.RemoteProfile,
+) (profile status.RemoteProfile, name string) {
 	profile.Name = util.FormatFullName(self.FirstName, self.LastName, self.Deleted, self.ID)
-	profile.Phone = "+" + strings.TrimPrefix(self.Phone, "+")
+	if self.Phone != "" {
+		profile.Phone = "+" + strings.TrimPrefix(self.Phone, "+")
+	} else if prevState != nil {
+		profile.Phone = prevState.Phone
+	}
 	profile.Username = self.Username
 	if self.Username == "" && len(self.Usernames) > 0 {
 		profile.Username = self.Usernames[0].Username
+	}
+	if ghost != nil {
+		profile.Avatar = ghost.AvatarMXC
+	} else if prevState != nil {
+		profile.Avatar = prevState.Avatar
 	}
 	name = cmp.Or(profile.Username, profile.Phone, profile.Name)
 	return
 }
 
-func (t *TelegramClient) onConnected(self *tg.User) {
-	// TODO update ghost info?
-	newProfile, newName := userToRemoteProfile(self)
-	// TODO fill avatar from ghost or something?
-	newProfile.Avatar = t.userLogin.RemoteProfile.Avatar
-	newProfile.AvatarFile = t.userLogin.RemoteProfile.AvatarFile
+func (t *TelegramClient) updateRemoteProfile(ctx context.Context, self *tg.User, ghost *bridgev2.Ghost) bool {
+	newProfile, newName := userToRemoteProfile(self, ghost, &t.userLogin.RemoteProfile)
 	if t.userLogin.RemoteProfile != newProfile || t.userLogin.RemoteName != newName {
 		t.userLogin.RemoteProfile = newProfile
 		t.userLogin.RemoteName = newName
-		err := t.userLogin.Save(t.main.Bridge.BackgroundCtx)
+		err := t.userLogin.Save(ctx)
 		if err != nil {
 			t.userLogin.Log.Err(err).Msg("Failed to save user login after profile update")
 		}
+		return true
 	}
+	return false
+}
+
+func (t *TelegramClient) onConnected(self *tg.User) {
+	log := t.userLogin.Log
+	ctx := log.WithContext(t.main.Bridge.BackgroundCtx)
+	ghost, err := t.main.Bridge.GetGhostByID(ctx, t.userID)
+	if err != nil {
+		log.Err(err).Msg("Failed to get own ghost")
+	} else if wrapped, err := t.wrapUserInfo(ctx, self); err != nil {
+		log.Err(err).Msg("Failed to wrap own user info")
+	} else {
+		ghost.UpdateInfo(ctx, wrapped)
+	}
+
+	t.updateRemoteProfile(ctx, self, ghost)
 	t.userLogin.BridgeState.Send(status.BridgeState{StateEvent: status.StateConnected})
 }
 
@@ -590,97 +616,6 @@ func (t *TelegramClient) getSingleChannel(ctx context.Context, id int64) (*tg.Ch
 	} else {
 		return channel, nil
 	}
-}
-
-func (t *TelegramClient) GetUserInfo(ctx context.Context, ghost *bridgev2.Ghost) (*bridgev2.UserInfo, error) {
-	peerType, id, err := ids.ParseUserID(ghost.ID)
-	if err != nil {
-		return nil, err
-	}
-	switch peerType {
-	case ids.PeerTypeUser:
-		if user, err := t.getSingleUser(ctx, id); err != nil {
-			return nil, fmt.Errorf("failed to get user %d: %w", id, err)
-		} else if user.TypeID() != tg.UserTypeID {
-			return nil, err
-		} else {
-			return t.updateGhost(ctx, id, user.(*tg.User))
-		}
-	case ids.PeerTypeChannel:
-		if channel, err := t.getSingleChannel(ctx, id); err != nil {
-			return nil, fmt.Errorf("failed to get channel %d: %w", id, err)
-		} else if channel.TypeID() != tg.ChannelTypeID {
-			return nil, err
-		} else {
-			return t.updateChannel(ctx, channel)
-		}
-	default:
-		return nil, fmt.Errorf("unexpected peer type: %s", peerType)
-	}
-}
-
-func (t *TelegramClient) getUserInfoFromTelegramUser(ctx context.Context, u tg.UserClass) (*bridgev2.UserInfo, error) {
-	user, ok := u.(*tg.User)
-	if !ok {
-		return nil, fmt.Errorf("user is %T not *tg.User", user)
-	}
-	var identifiers []string
-	if !user.Min {
-		if accessHash, ok := user.GetAccessHash(); ok {
-			if err := t.ScopedStore.SetAccessHash(ctx, ids.PeerTypeUser, user.ID, accessHash); err != nil {
-				return nil, err
-			}
-		}
-
-		if err := t.ScopedStore.SetUsername(ctx, ids.PeerTypeUser, user.ID, user.Username); err != nil {
-			return nil, err
-		}
-
-		if user.Username != "" {
-			identifiers = append(identifiers, fmt.Sprintf("telegram:%s", user.Username))
-		}
-		for _, username := range user.Usernames {
-			identifiers = append(identifiers, fmt.Sprintf("telegram:%s", username.Username))
-		}
-		if phone, ok := user.GetPhone(); ok {
-			normalized := strings.TrimPrefix(phone, "+")
-			identifiers = append(identifiers, fmt.Sprintf("tel:+%s", normalized))
-			if err := t.ScopedStore.SetPhoneNumber(ctx, user.ID, normalized); err != nil {
-				return nil, err
-			}
-		}
-	}
-	slices.Sort(identifiers)
-	identifiers = slices.Compact(identifiers)
-
-	var avatar *bridgev2.Avatar
-	if p, ok := user.GetPhoto(); ok && p.TypeID() == tg.UserProfilePhotoTypeID {
-		photo := p.(*tg.UserProfilePhoto)
-		var err error
-		avatar, err = t.convertUserProfilePhoto(ctx, user.ID, photo)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	name := util.FormatFullName(user.FirstName, user.LastName, user.Deleted, user.ID)
-	return &bridgev2.UserInfo{
-		IsBot:       &user.Bot,
-		Name:        &name,
-		Avatar:      avatar,
-		Identifiers: identifiers,
-		ExtraUpdates: func(ctx context.Context, ghost *bridgev2.Ghost) (changed bool) {
-			meta := ghost.Metadata.(*GhostMetadata)
-			if !user.Min {
-				changed = changed || meta.IsPremium != user.Premium || meta.IsBot != user.Bot || meta.IsContact != user.Contact
-				meta.IsPremium = user.Premium
-				meta.IsBot = user.Bot
-				meta.IsContact = user.Contact
-				meta.Deleted = user.Deleted
-			}
-			return changed
-		},
-	}, nil
 }
 
 func (t *TelegramClient) IsLoggedIn() bool {

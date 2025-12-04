@@ -20,16 +20,13 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
 	"maunium.net/go/mautrix/bridgev2"
 	"maunium.net/go/mautrix/bridgev2/database"
-	"maunium.net/go/mautrix/bridgev2/status"
 
 	"go.mau.fi/mautrix-telegram/pkg/connector/ids"
-	"go.mau.fi/mautrix-telegram/pkg/connector/util"
 	"go.mau.fi/mautrix-telegram/pkg/gotd/tg"
 )
 
@@ -131,25 +128,7 @@ func finalizeLogin(ctx context.Context, user *bridgev2.User, authorization *tg.A
 		}
 	}()
 
-	fullName := util.FormatFullName(me.FirstName, me.LastName, me.Deleted, me.ID)
-	username := me.Username
-	if username == "" && len(me.Usernames) > 0 {
-		username = me.Usernames[0].Username
-	}
-	normalizedPhone := "+" + strings.TrimPrefix(me.Phone, "+")
-	remoteName := username
-	if remoteName == "" {
-		remoteName = normalizedPhone
-	}
-	if remoteName == "" {
-		remoteName = fullName
-	}
-	ul.RemoteName = remoteName
-	ul.RemoteProfile = status.RemoteProfile{
-		Phone:    me.Phone,
-		Username: username,
-		Name:     fullName,
-	}
+	ul.RemoteProfile, ul.RemoteName = userToRemoteProfile(me)
 	err = ul.Save(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to save login: %w", err)
@@ -158,7 +137,7 @@ func finalizeLogin(ctx context.Context, user *bridgev2.User, authorization *tg.A
 	return &bridgev2.LoginStep{
 		Type:         bridgev2.LoginStepTypeComplete,
 		StepID:       LoginStepIDComplete,
-		Instructions: fmt.Sprintf("Successfully logged in as %d / +%s (%s)", me.ID, me.Phone, remoteName),
+		Instructions: fmt.Sprintf("Successfully logged in as %s (`%d`)", ul.RemoteName, me.ID),
 		CompleteParams: &bridgev2.LoginCompleteParams{
 			UserLoginID: ul.ID,
 			UserLogin:   ul,

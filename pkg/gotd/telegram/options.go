@@ -56,7 +56,7 @@ type Options struct {
 	OnAuthError func(error)
 	// OnConnected will be called when the connection has been established and
 	// the user has been fetched successfully.
-	OnConnected func()
+	OnConnected func(*tg.User)
 	// MigrationTimeout configures migration timeout.
 	MigrationTimeout time.Duration
 

@@ -64,7 +64,7 @@ type Client struct {
 	resolver       dcs.Resolver           // immutable
 	onDead         func()                 // immutable
 	onAuthError    func(error)            // immutable
-	onConnected    func()                 // immutable
+	onConnected    func(*tg.User)         // immutable
 	newConnBackoff func() backoff.BackOff // immutable
 	defaultMode    manager.ConnMode       // immutable
 

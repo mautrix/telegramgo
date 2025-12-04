@@ -43,7 +43,7 @@ func (c *Client) runUntilRestart(ctx context.Context) error {
 
 			c.log.Info("Got self", zap.String("username", self.Username))
 			if c.onConnected != nil {
-				c.onConnected()
+				c.onConnected(self)
 			}
 			return nil
 		})

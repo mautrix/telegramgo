@@ -17,6 +17,7 @@
 package connector
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -269,8 +270,8 @@ func NewTelegramClient(ctx context.Context, tc *TelegramConnector, login *bridge
 		Logger:               zaplog,
 		UpdateHandler:        client.updatesManager,
 		OnDead:               client.onDead,
-		OnSession:            client.onConnectionStateChange("session"),
-		OnConnected:          client.onConnectionStateChange("connected"),
+		OnSession:            client.onSession,
+		OnConnected:          client.onConnected,
 		PingCallback:         client.onPing,
 		OnAuthError:          client.onAuthError,
 		PingTimeout:          time.Duration(tc.Config.Ping.TimeoutSeconds) * time.Second,
@@ -426,41 +427,59 @@ func (t *TelegramClient) sendBadCredentialsOrUnknownError(err error) {
 
 func (t *TelegramClient) onPing() {
 	if t.userLogin.BridgeState.GetPrev().StateEvent == status.StateConnected {
-		t.main.Bridge.Log.Trace().Msg("Got ping, not checking connectivity because we are already connected")
+		return
+	}
+	ctx := t.userLogin.Log.WithContext(t.main.Bridge.BackgroundCtx)
+	t.userLogin.Log.Debug().Msg("Got ping while not connected, checking auth")
+
+	me, err := t.client.Self(ctx)
+	if auth.IsUnauthorized(err) {
+		t.onAuthError(fmt.Errorf("not logged in"))
+	} else if errors.Is(err, syscall.EPIPE) {
+		// This is a pipe error, try disconnecting which will force the
+		// updatesManager to fail and cause the client to reconnect.
+		t.userLogin.BridgeState.Send(status.BridgeState{
+			StateEvent: status.StateTransientDisconnect,
+			Error:      "pipe-error",
+			Message:    humanise.Error(err),
+		})
+	} else if err != nil {
+		t.sendBadCredentialsOrUnknownError(err)
 	} else {
-		t.onConnectionStateChange("ping while not connected")
+		t.onConnected(me)
 	}
 }
 
-func (t *TelegramClient) onConnectionStateChange(reason string) func() {
-	return func() {
-		log := t.main.Bridge.Log.With().
-			Str("component", "telegram_client").
-			Str("user_login_id", string(t.userLogin.ID)).
-			Str("reason", reason).
-			Logger()
-		log.Info().Msg("Connection state changed")
-		ctx := log.WithContext(context.Background())
+func userToRemoteProfile(self *tg.User) (profile status.RemoteProfile, name string) {
+	profile.Name = util.FormatFullName(self.FirstName, self.LastName, self.Deleted, self.ID)
+	profile.Phone = "+" + strings.TrimPrefix(self.Phone, "+")
+	profile.Username = self.Username
+	if self.Username == "" && len(self.Usernames) > 0 {
+		profile.Username = self.Usernames[0].Username
+	}
+	name = cmp.Or(profile.Username, profile.Phone, profile.Name)
+	return
+}
 
-		authStatus, err := t.client.Auth().Status(ctx)
+func (t *TelegramClient) onConnected(self *tg.User) {
+	// TODO update ghost info?
+	newProfile, newName := userToRemoteProfile(self)
+	// TODO fill avatar from ghost or something?
+	newProfile.Avatar = t.userLogin.RemoteProfile.Avatar
+	newProfile.AvatarFile = t.userLogin.RemoteProfile.AvatarFile
+	if t.userLogin.RemoteProfile != newProfile || t.userLogin.RemoteName != newName {
+		t.userLogin.RemoteProfile = newProfile
+		t.userLogin.RemoteName = newName
+		err := t.userLogin.Save(t.main.Bridge.BackgroundCtx)
 		if err != nil {
-			if errors.Is(err, syscall.EPIPE) {
-				// This is a pipe error, try disconnecting which will force the
-				// updatesManager to fail and cause the client to reconnect.
-				t.userLogin.BridgeState.Send(status.BridgeState{
-					StateEvent: status.StateTransientDisconnect,
-					Error:      "pipe-error",
-					Message:    humanise.Error(err),
-				})
-			} else {
-				t.sendBadCredentialsOrUnknownError(err)
-			}
-		} else if authStatus.Authorized {
-			t.userLogin.BridgeState.Send(status.BridgeState{StateEvent: status.StateConnected})
-		} else {
-			t.onAuthError(fmt.Errorf("not logged in"))
+			t.userLogin.Log.Err(err).Msg("Failed to save user login after profile update")
 		}
 	}
+	t.userLogin.BridgeState.Send(status.BridgeState{StateEvent: status.StateConnected})
+}
+
+func (t *TelegramClient) onSession() {
+	t.userLogin.Log.Debug().Msg("Got session created event")
 }
 
 func (t *TelegramClient) onAuthError(err error) {

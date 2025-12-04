@@ -2,7 +2,6 @@ package mtproto
 
 import (
 	"github.com/go-faster/errors"
-	"go.uber.org/zap"
 
 	"go.mau.fi/mautrix-telegram/pkg/gotd/bin"
 	"go.mau.fi/mautrix-telegram/pkg/gotd/mt"
@@ -15,8 +14,6 @@ func (c *Conn) handleMessage(msgID int64, b *bin.Buffer) error {
 		// Empty body.
 		return errors.Wrap(err, "peek message type")
 	}
-
-	c.logWithBuffer(b).Debug("Handle message", zap.Int64("msg_id", msgID))
 
 	switch id {
 	case mt.NewSessionCreatedTypeID:

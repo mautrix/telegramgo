@@ -10,8 +10,6 @@ import (
 )
 
 func (c *Conn) ackLoop(ctx context.Context) error {
-	log := c.log.Named("ack")
-
 	var buf []int64
 	send := func() {
 		defer func() { buf = buf[:0] }()
@@ -20,8 +18,6 @@ func (c *Conn) ackLoop(ctx context.Context) error {
 			c.log.Error("Failed to ACK", zap.Error(err))
 			return
 		}
-
-		log.Debug("Ack", zap.Int64s("msg_ids", buf))
 	}
 
 	ticker := c.clock.Ticker(c.ackInterval)

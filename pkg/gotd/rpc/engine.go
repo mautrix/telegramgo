@@ -88,7 +88,6 @@ func (e *Engine) Do(ctx context.Context, req Request) error {
 	defer retryClose()
 
 	log := e.log.With(zap.Int64("msg_id", req.MsgID))
-	log.Debug("Do called")
 
 	done := make(chan struct{})
 
@@ -100,8 +99,6 @@ func (e *Engine) Do(ctx context.Context, req Request) error {
 	)
 
 	handler := func(rpcBuff *bin.Buffer, rpcErr error) error {
-		log.Debug("Handler called")
-
 		if ok := atomic.CompareAndSwapUint32(&handlerCalled, 0, 1); !ok {
 			log.Warn("Handler already called")
 
@@ -207,7 +204,6 @@ func (e *Engine) retryUntilAck(ctx context.Context, req Request) (sent bool, err
 			case <-e.reqCtx.Done():
 				return errors.Wrap(e.reqCtx.Err(), "engine forcibly closed")
 			case <-ackChan:
-				log.Debug("Acknowledged")
 				return nil
 			case <-timer.C():
 				timer.Reset(e.retryInterval)

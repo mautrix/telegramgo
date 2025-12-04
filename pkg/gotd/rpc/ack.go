@@ -12,7 +12,6 @@ func (e *Engine) NotifyAcks(ids []int64) {
 	for _, id := range ids {
 		ch, ok := e.ack[id]
 		if !ok {
-			e.log.Debug("Acknowledge callback not set", zap.Int64("msg_id", id))
 			continue
 		}
 
@@ -31,7 +30,6 @@ func (e *Engine) waitAck(id int64) chan struct{} {
 		return c
 	}
 
-	log.Debug("Waiting for acknowledge")
 	c := make(chan struct{})
 	e.ack[id] = c
 	return c

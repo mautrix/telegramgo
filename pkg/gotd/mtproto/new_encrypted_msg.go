@@ -2,7 +2,6 @@ package mtproto
 
 import (
 	"github.com/go-faster/errors"
-	"go.uber.org/zap"
 
 	"go.mau.fi/mautrix-telegram/pkg/gotd/bin"
 	"go.mau.fi/mautrix-telegram/pkg/gotd/crypto"
@@ -16,14 +15,8 @@ func (c *Conn) newEncryptedMessage(id int64, seq int32, payload bin.Encoder, b *
 	// 	1) Generate Length() method for every encoder, to count length without encoding.
 	// 	2) Re-use buffer instead of using yet one.
 	// 	3) Do not send proto.GZIP if gzipped size is equal or bigger.
-	var (
-		d   crypto.EncryptedMessageData
-		log = c.log
-	)
+	var d crypto.EncryptedMessageData
 	if c.compressThreshold <= 0 {
-		if obj, ok := payload.(interface{ TypeID() uint32 }); ok {
-			log = c.logWithTypeID(obj.TypeID())
-		}
 		d = crypto.EncryptedMessageData{
 			SessionID: s.ID,
 			Salt:      s.Salt,
@@ -38,7 +31,6 @@ func (c *Conn) newEncryptedMessage(id int64, seq int32, payload bin.Encoder, b *
 			return errors.Wrap(err, "encode payload")
 		}
 
-		log = c.logWithType(payloadBuf)
 		if payloadBuf.Len() > c.compressThreshold {
 			d = crypto.EncryptedMessageData{
 				SessionID: s.ID,
@@ -59,7 +51,6 @@ func (c *Conn) newEncryptedMessage(id int64, seq int32, payload bin.Encoder, b *
 		}
 	}
 
-	log.Debug("Request", zap.Int64("msg_id", id))
 	if err := c.cipher.Encrypt(s.Key, d, b); err != nil {
 		return errors.Wrap(err, "encrypt")
 	}

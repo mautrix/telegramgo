@@ -96,7 +96,7 @@ func (c *Conn) OnSession(session mtproto.Session) error {
 	return c.handler.OnSession(cfg, session)
 }
 
-func (c *Conn) trackInvoke() func() {
+func (c *Conn) trackInvoke() func(bin.Encoder, bin.Decoder, *error) {
 	start := c.clock.Now()
 
 	c.mux.Lock()
@@ -105,7 +105,7 @@ func (c *Conn) trackInvoke() func() {
 	c.ongoing++
 	c.latest = start
 
-	return func() {
+	return func(input bin.Encoder, output bin.Decoder, retErr *error) {
 		c.mux.Lock()
 		defer c.mux.Unlock()
 
@@ -113,9 +113,18 @@ func (c *Conn) trackInvoke() func() {
 		end := c.clock.Now()
 		c.latest = end
 
-		c.log.Debug("Invoke",
+		var respField zap.Field
+		if retErr != nil {
+			respField = zap.Error(*retErr)
+		} else {
+			respField = zap.Any("response_payload", output)
+		}
+
+		c.log.Debug("Request completed",
 			zap.Duration("duration", end.Sub(start)),
 			zap.Int("ongoing", c.ongoing),
+			zap.Any("request_payload", input),
+			respField,
 		)
 	}
 }
@@ -160,9 +169,9 @@ func (c *Conn) Ready() <-chan struct{} {
 }
 
 // Invoke implements Invoker.
-func (c *Conn) Invoke(ctx context.Context, input bin.Encoder, output bin.Decoder) error {
+func (c *Conn) Invoke(ctx context.Context, input bin.Encoder, output bin.Decoder) (retErr error) {
 	// Tracking ongoing invokes.
-	defer c.trackInvoke()()
+	defer c.trackInvoke()(input, output, &retErr)
 	if err := c.waitSession(ctx); err != nil {
 		return errors.Wrap(err, "waitSession")
 	}

@@ -100,7 +100,26 @@ func (t *TelegramClient) onUpdateChannel(ctx context.Context, e tg.Entities, upd
 		log.Error().Msg("Update was for a left channel. Leaving the channel.")
 		return t.selfLeaveChat(portalKey)
 	} else {
-		// TODO update the channel info
+		res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatResync{
+			EventMeta: simplevent.EventMeta{
+				PortalKey:    portalKey,
+				CreatePortal: true,
+			},
+			GetChatInfoFunc: func(ctx context.Context, portal *bridgev2.Portal) (*bridgev2.ChatInfo, error) {
+				chatInfo, mfm, err := t.wrapChatInfo(channel)
+				if err != nil {
+					return nil, err
+				}
+				if portal.MXID == "" {
+					err = t.fillChannelMembers(ctx, mfm, chatInfo.Members)
+					if err != nil {
+						return nil, err
+					}
+				}
+				return chatInfo, nil
+			},
+		})
+		return resultToError(res)
 	}
 	return nil
 }

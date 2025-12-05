@@ -125,13 +125,13 @@ func (t *TelegramClient) onUpdateChannel(ctx context.Context, e tg.Entities, upd
 }
 
 func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, entities tg.Entities, update IGetMessage) error {
-	log := zerolog.Ctx(ctx)
+	log := *zerolog.Ctx(ctx)
 	switch msg := update.GetMessage().(type) {
 	case *tg.Message:
 		var isBroadcastChannel bool
 		switch peer := msg.PeerID.(type) {
 		case *tg.PeerChannel:
-			log := log.With().Int64("channel_id", peer.ChannelID).Logger()
+			log = log.With().Int64("channel_id", peer.ChannelID).Logger()
 			if c, ok := entities.Channels[peer.ChannelID]; ok && c.Left {
 				log.Debug().Msg("Received message in left channel, ignoring")
 				return nil
@@ -139,7 +139,7 @@ func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, entities tg.Ent
 				isBroadcastChannel = true
 			}
 		case *tg.PeerChat:
-			log := log.With().Int64("chat_id", peer.ChatID).Logger()
+			log = log.With().Int64("chat_id", peer.ChatID).Logger()
 			if c, ok := entities.Chats[peer.ChatID]; ok && c.Left {
 				log.Debug().Msg("Received message in left chat, ignoring")
 				return nil
@@ -182,432 +182,436 @@ func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, entities tg.Ent
 
 		return t.handleTelegramReactions(ctx, msg)
 	case *tg.MessageService:
-		sender := t.getEventSender(msg, false)
-
-		eventMeta := simplevent.EventMeta{
-			PortalKey: t.makePortalKeyFromPeer(msg.PeerID),
-			Sender:    sender,
-			Timestamp: time.Unix(int64(msg.Date), 0),
-			LogContext: func(c zerolog.Context) zerolog.Context {
-				return c.
-					Int("message_id", msg.GetID()).
-					Str("sender", string(sender.Sender)).
-					Str("sender_login", string(sender.SenderLogin)).
-					Bool("is_from_me", sender.IsFromMe).
-					Stringer("peer_id", msg.PeerID)
-			},
-			StreamOrder: int64(msg.GetID()),
-		}
-		switch action := msg.Action.(type) {
-		case *tg.MessageActionChatEditTitle:
-			res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatInfoChange{
-				EventMeta:      eventMeta.WithType(bridgev2.RemoteEventChatInfoChange),
-				ChatInfoChange: &bridgev2.ChatInfoChange{ChatInfo: &bridgev2.ChatInfo{Name: &action.Title}},
-			})
-			if err := resultToError(res); err != nil {
-				return err
-			}
-		case *tg.MessageActionChatEditPhoto:
-			switch peer := msg.PeerID.(type) {
-			case *tg.PeerChat:
-				res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatInfoChange{
-					EventMeta:      eventMeta.WithType(bridgev2.RemoteEventChatInfoChange),
-					ChatInfoChange: &bridgev2.ChatInfoChange{ChatInfo: &bridgev2.ChatInfo{Avatar: t.avatarFromPhoto(ctx, ids.PeerTypeChat, peer.ChatID, action.Photo)}},
-				})
-				if err := resultToError(res); err != nil {
-					return err
-				}
-			case *tg.PeerChannel:
-				res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatInfoChange{
-					EventMeta:      eventMeta.WithType(bridgev2.RemoteEventChatInfoChange),
-					ChatInfoChange: &bridgev2.ChatInfoChange{ChatInfo: &bridgev2.ChatInfo{Avatar: t.avatarFromPhoto(ctx, ids.PeerTypeChannel, peer.ChannelID, action.Photo)}},
-				})
-				if err := resultToError(res); err != nil {
-					return err
-				}
-			}
-
-		case *tg.MessageActionChatDeletePhoto:
-			res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatInfoChange{
-				EventMeta:      eventMeta.WithType(bridgev2.RemoteEventChatInfoChange),
-				ChatInfoChange: &bridgev2.ChatInfoChange{ChatInfo: &bridgev2.ChatInfo{Avatar: &bridgev2.Avatar{Remove: true}}},
-			})
-			if err := resultToError(res); err != nil {
-				return err
-			}
-		case *tg.MessageActionChatAddUser:
-			memberChanges := &bridgev2.ChatMemberList{
-				MemberMap: map[networkid.UserID]bridgev2.ChatMember{},
-			}
-			for _, userID := range action.Users {
-				memberChanges.MemberMap[ids.MakeUserID(userID)] = bridgev2.ChatMember{
-					EventSender: t.senderForUserID(userID),
-					Membership:  event.MembershipJoin,
-				}
-			}
-			res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatInfoChange{
-				EventMeta:      eventMeta.WithType(bridgev2.RemoteEventChatInfoChange),
-				ChatInfoChange: &bridgev2.ChatInfoChange{MemberChanges: memberChanges},
-			})
-			if err := resultToError(res); err != nil {
-				return err
-			}
-		case *tg.MessageActionChatJoinedByLink:
-			res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatInfoChange{
-				EventMeta: eventMeta.WithType(bridgev2.RemoteEventChatInfoChange),
-				ChatInfoChange: &bridgev2.ChatInfoChange{
-					MemberChanges: &bridgev2.ChatMemberList{
-						MemberMap: map[networkid.UserID]bridgev2.ChatMember{
-							sender.Sender: {EventSender: sender, Membership: event.MembershipJoin},
-						},
-					},
-				},
-			})
-			if err := resultToError(res); err != nil {
-				return err
-			}
-		case *tg.MessageActionChatDeleteUser:
-			if action.UserID == t.telegramUserID {
-				return t.selfLeaveChat(eventMeta.PortalKey)
-			}
-			res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatInfoChange{
-				EventMeta: eventMeta.WithType(bridgev2.RemoteEventChatInfoChange),
-				ChatInfoChange: &bridgev2.ChatInfoChange{
-					MemberChanges: &bridgev2.ChatMemberList{
-						MemberMap: map[networkid.UserID]bridgev2.ChatMember{
-							ids.MakeUserID(action.UserID): {
-								EventSender: t.senderForUserID(action.UserID),
-								Membership:  event.MembershipLeave,
-							},
-						},
-					},
-				},
-			})
-			if err := resultToError(res); err != nil {
-				return err
-			}
-		case *tg.MessageActionChatCreate:
-			memberMap := map[networkid.UserID]bridgev2.ChatMember{}
-			for _, userID := range action.Users {
-				memberMap[ids.MakeUserID(userID)] = bridgev2.ChatMember{
-					EventSender: t.senderForUserID(userID),
-					Membership:  event.MembershipJoin,
-				}
-			}
-
-			res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatResync{
-				EventMeta: eventMeta.
-					WithType(bridgev2.RemoteEventChatResync).
-					WithCreatePortal(true),
-				ChatInfo: &bridgev2.ChatInfo{
-					Name: &action.Title,
-					Members: &bridgev2.ChatMemberList{
-						IsFull:           true,
-						TotalMemberCount: len(action.Users),
-						MemberMap:        memberMap,
-					},
-					CanBackfill: true,
-				},
-			})
-			if err := resultToError(res); err != nil {
-				return err
-			}
-			res = t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.Message[any]{
-				EventMeta: eventMeta.WithType(bridgev2.RemoteEventMessage),
-				ID:        ids.GetMessageIDFromMessage(msg),
-				ConvertMessageFunc: func(ctx context.Context, portal *bridgev2.Portal, intent bridgev2.MatrixAPI, data any) (*bridgev2.ConvertedMessage, error) {
-					return &bridgev2.ConvertedMessage{
-						Parts: []*bridgev2.ConvertedMessagePart{
-							{
-								Type:    event.EventMessage,
-								Content: &event.MessageEventContent{MsgType: event.MsgNotice, Body: "Created the group"},
-							},
-						},
-					}, nil
-				},
-			})
-			if err := resultToError(res); err != nil {
-				return err
-			}
-
-		case *tg.MessageActionChannelCreate:
-			modLevel := 50
-			res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatResync{
-				EventMeta: eventMeta.
-					WithType(bridgev2.RemoteEventChatResync).
-					WithCreatePortal(true),
-				ChatInfo: &bridgev2.ChatInfo{
-					Name: &action.Title,
-					Members: &bridgev2.ChatMemberList{
-						MemberMap: map[networkid.UserID]bridgev2.ChatMember{
-							t.userID: {
-								EventSender: t.mySender(),
-								Membership:  event.MembershipJoin,
-								PowerLevel:  &modLevel,
-							},
-						},
-						PowerLevels: &bridgev2.PowerLevelOverrides{
-							EventsDefault: &modLevel,
-						},
-					},
-					CanBackfill: true,
-				},
-			})
-			if err := resultToError(res); err != nil {
-				return err
-			}
-			res = t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.Message[any]{
-				EventMeta: eventMeta.WithType(bridgev2.RemoteEventMessage),
-				ID:        ids.GetMessageIDFromMessage(msg),
-				ConvertMessageFunc: func(ctx context.Context, portal *bridgev2.Portal, intent bridgev2.MatrixAPI, data any) (*bridgev2.ConvertedMessage, error) {
-					return &bridgev2.ConvertedMessage{
-						Parts: []*bridgev2.ConvertedMessagePart{
-							{
-								Type:    event.EventMessage,
-								Content: &event.MessageEventContent{MsgType: event.MsgNotice, Body: "Created the group"},
-							},
-						},
-					}, nil
-				},
-			})
-			if err := resultToError(res); err != nil {
-				return err
-			}
-		case *tg.MessageActionSetMessagesTTL:
-			setting := database.DisappearingSetting{
-				Type:  event.DisappearingTypeAfterSend,
-				Timer: time.Duration(action.Period) * time.Second,
-			}.Normalize()
-			res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatInfoChange{
-				EventMeta: eventMeta.WithType(bridgev2.RemoteEventChatInfoChange),
-				ChatInfoChange: &bridgev2.ChatInfoChange{
-					ChatInfo: &bridgev2.ChatInfo{
-						Disappear: &setting,
-					},
-				},
-			})
-			if err := resultToError(res); err != nil {
-				return err
-			}
-		case *tg.MessageActionPhoneCall:
-			var body strings.Builder
-			if action.Video {
-				body.WriteString("Video call ")
-			} else {
-				body.WriteString("Call ")
-			}
-			switch action.Reason.TypeID() {
-			case tg.PhoneCallDiscardReasonMissedTypeID:
-				body.WriteString("missed")
-			case tg.PhoneCallDiscardReasonDisconnectTypeID:
-				body.WriteString("disconnected")
-			case tg.PhoneCallDiscardReasonHangupTypeID:
-				body.WriteString("ended")
-			case tg.PhoneCallDiscardReasonBusyTypeID:
-				body.WriteString("rejected")
-			default:
-				log.Warn().Stringer("end_reason", action.Reason).Msg("Unknown call end reason")
-				return nil
-			}
-
-			if action.Duration > 0 {
-				body.WriteString(" (")
-				body.WriteString(exfmt.Duration(time.Duration(action.Duration) * time.Second))
-				body.WriteString(")")
-			}
-
-			res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.Message[any]{
-				EventMeta: eventMeta.WithType(bridgev2.RemoteEventMessage),
-				ID:        ids.GetMessageIDFromMessage(msg),
-				ConvertMessageFunc: func(ctx context.Context, portal *bridgev2.Portal, intent bridgev2.MatrixAPI, data any) (*bridgev2.ConvertedMessage, error) {
-					return &bridgev2.ConvertedMessage{
-						Parts: []*bridgev2.ConvertedMessagePart{
-							{
-								Type:    event.EventMessage,
-								Content: &event.MessageEventContent{MsgType: event.MsgNotice, Body: body.String()},
-							},
-						},
-					}, nil
-				},
-			})
-			if err := resultToError(res); err != nil {
-				return err
-			}
-		case *tg.MessageActionGroupCall:
-			var body strings.Builder
-			if action.Duration == 0 {
-				body.WriteString("Started a video chat")
-			} else {
-				body.WriteString("Ended the video chat")
-				body.WriteString(" (")
-				body.WriteString(exfmt.Duration(time.Duration(action.Duration) * time.Second))
-				body.WriteString(")")
-			}
-
-			res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.Message[any]{
-				EventMeta: eventMeta.WithType(bridgev2.RemoteEventMessage),
-				ID:        ids.GetMessageIDFromMessage(msg),
-				ConvertMessageFunc: func(ctx context.Context, portal *bridgev2.Portal, intent bridgev2.MatrixAPI, data any) (*bridgev2.ConvertedMessage, error) {
-					return &bridgev2.ConvertedMessage{
-						Parts: []*bridgev2.ConvertedMessagePart{
-							{
-								Type:    event.EventMessage,
-								Content: &event.MessageEventContent{MsgType: event.MsgNotice, Body: body.String()},
-							},
-						},
-					}, nil
-				},
-			})
-			if err := resultToError(res); err != nil {
-				return err
-			}
-		case *tg.MessageActionInviteToGroupCall:
-			var body, html strings.Builder
-			var mentions event.Mentions
-			body.WriteString("Invited ")
-			html.WriteString("Invited ")
-			for i, userID := range action.Users {
-				if i > 0 {
-					body.WriteString(", ")
-				}
-
-				if ghost, err := t.main.Bridge.GetGhostByID(ctx, ids.MakeUserID(userID)); err != nil {
-					return err
-				} else {
-					var name string
-					if username, err := t.ScopedStore.GetUsername(ctx, ids.PeerTypeUser, userID); err != nil {
-						name = "@" + username
-					} else {
-						name = ghost.Name
-					}
-
-					mentions.UserIDs = append(mentions.UserIDs, ghost.Intent.GetMXID())
-					body.WriteString(name)
-					html.WriteString(fmt.Sprintf(`<a href="%s">@%s</a>`, ghost.Intent.GetMXID().URI().MatrixToURL(), name))
-				}
-			}
-			body.WriteString(" to the video chat")
-			html.WriteString(" to the video chat")
-			res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.Message[any]{
-				EventMeta: eventMeta.WithType(bridgev2.RemoteEventMessage),
-				ID:        ids.GetMessageIDFromMessage(msg),
-				ConvertMessageFunc: func(ctx context.Context, portal *bridgev2.Portal, intent bridgev2.MatrixAPI, data any) (*bridgev2.ConvertedMessage, error) {
-					return &bridgev2.ConvertedMessage{
-						Parts: []*bridgev2.ConvertedMessagePart{
-							{
-								Type: event.EventMessage,
-								Content: &event.MessageEventContent{
-									MsgType:       event.MsgNotice,
-									Body:          body.String(),
-									Format:        event.FormatHTML,
-									FormattedBody: html.String(),
-									Mentions:      &mentions,
-								},
-							},
-						},
-					}, nil
-				},
-			})
-			if err := resultToError(res); err != nil {
-				return err
-			}
-		case *tg.MessageActionGroupCallScheduled:
-			start := time.Unix(int64(action.ScheduleDate), 0)
-			res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.Message[any]{
-				EventMeta: eventMeta.
-					WithType(bridgev2.RemoteEventMessage).
-					WithSender(bridgev2.EventSender{}), // Telegram shows it as not coming from a specific user
-				ID: ids.GetMessageIDFromMessage(msg),
-				ConvertMessageFunc: func(ctx context.Context, portal *bridgev2.Portal, intent bridgev2.MatrixAPI, data any) (*bridgev2.ConvertedMessage, error) {
-					return &bridgev2.ConvertedMessage{
-						Parts: []*bridgev2.ConvertedMessagePart{
-							{
-								Type: event.EventMessage,
-								Content: &event.MessageEventContent{
-									MsgType: event.MsgNotice,
-									Body:    fmt.Sprintf("Video chat scheduled for %s", start.Format("Jan 2, 15:04")),
-								},
-							},
-						},
-					}, nil
-				},
-			})
-			if err := resultToError(res); err != nil {
-				return err
-			}
-
-		case *tg.MessageActionChatMigrateTo:
-			log.Debug().Int64("channel_id", action.ChannelID).Msg("MessageActionChatMigrateTo")
-			newPortalKey := t.makePortalKeyFromID(ids.PeerTypeChannel, action.ChannelID)
-			if err := t.migrateChat(ctx, eventMeta.PortalKey, newPortalKey); err != nil {
-				log.Err(err).Msg("Failed to migrate chat to channel")
-				return err
-			}
-			res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.Message[any]{
-				EventMeta: eventMeta.
-					WithPortalKey(newPortalKey).
-					WithStreamOrder(0).
-					WithType(bridgev2.RemoteEventMessage),
-				ID: ids.GetMessageIDFromMessage(msg),
-				ConvertMessageFunc: func(ctx context.Context, portal *bridgev2.Portal, intent bridgev2.MatrixAPI, data any) (*bridgev2.ConvertedMessage, error) {
-					return &bridgev2.ConvertedMessage{
-						Parts: []*bridgev2.ConvertedMessagePart{
-							{
-								Type: event.EventMessage,
-								Content: &event.MessageEventContent{
-									MsgType: event.MsgNotice,
-									Body:    "Upgraded this group to a supergroup",
-								},
-							},
-						},
-					}, nil
-				},
-			})
-			if err := resultToError(res); err != nil {
-				return err
-			}
-
-		// case *tg.MessageActionChannelMigrateFrom:
-
-		// case *tg.MessageActionPinMessage:
-		// case *tg.MessageActionHistoryClear:
-		// case *tg.MessageActionGameScore:
-		// case *tg.MessageActionPaymentSentMe:
-		// case *tg.MessageActionPaymentSent:
-		// case *tg.MessageActionScreenshotTaken:
-		// case *tg.MessageActionCustomAction:
-		// case *tg.MessageActionBotAllowed:
-		// case *tg.MessageActionSecureValuesSentMe:
-		// case *tg.MessageActionSecureValuesSent:
-		// case *tg.MessageActionContactSignUp:
-		// case *tg.MessageActionGeoProximityReached:
-		// case *tg.MessageActionSetChatTheme:
-		// case *tg.MessageActionChatJoinedByRequest:
-		// case *tg.MessageActionWebViewDataSentMe:
-		// case *tg.MessageActionWebViewDataSent:
-		// case *tg.MessageActionGiftPremium:
-		// case *tg.MessageActionTopicCreate:
-		// case *tg.MessageActionTopicEdit:
-		// case *tg.MessageActionSuggestProfilePhoto:
-		// case *tg.MessageActionRequestedPeer:
-		// case *tg.MessageActionSetChatWallPaper:
-		// case *tg.MessageActionGiftCode:
-		// case *tg.MessageActionGiveawayLaunch:
-		// case *tg.MessageActionGiveawayResults:
-		// case *tg.MessageActionBoostApply:
-		// case *tg.MessageActionRequestedPeerSentMe:
-		default:
-			log.Warn().
-				Type("action_type", action).
-				Msg("ignoring unknown action type")
-			return nil
-		}
+		return t.handleServiceMessage(ctx, msg)
 
 	default:
 		log.Warn().
 			Type("action_type", msg).
 			Msg("ignoring unknown message type")
 		return nil
+	}
+}
+
+func (t *TelegramClient) handleServiceMessage(ctx context.Context, msg *tg.MessageService) error {
+	log := zerolog.Ctx(ctx)
+	sender := t.getEventSender(msg, false)
+
+	eventMeta := simplevent.EventMeta{
+		PortalKey: t.makePortalKeyFromPeer(msg.PeerID),
+		Sender:    sender,
+		Timestamp: time.Unix(int64(msg.Date), 0),
+		LogContext: func(c zerolog.Context) zerolog.Context {
+			return c.
+				Int("message_id", msg.GetID()).
+				Str("sender", string(sender.Sender)).
+				Str("sender_login", string(sender.SenderLogin)).
+				Bool("is_from_me", sender.IsFromMe).
+				Stringer("peer_id", msg.PeerID)
+		},
+		StreamOrder: int64(msg.GetID()),
+	}
+	switch action := msg.Action.(type) {
+	case *tg.MessageActionChatEditTitle:
+		res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatInfoChange{
+			EventMeta:      eventMeta.WithType(bridgev2.RemoteEventChatInfoChange),
+			ChatInfoChange: &bridgev2.ChatInfoChange{ChatInfo: &bridgev2.ChatInfo{Name: &action.Title}},
+		})
+		if err := resultToError(res); err != nil {
+			return err
+		}
+	case *tg.MessageActionChatEditPhoto:
+		switch peer := msg.PeerID.(type) {
+		case *tg.PeerChat:
+			res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatInfoChange{
+				EventMeta:      eventMeta.WithType(bridgev2.RemoteEventChatInfoChange),
+				ChatInfoChange: &bridgev2.ChatInfoChange{ChatInfo: &bridgev2.ChatInfo{Avatar: t.avatarFromPhoto(ctx, ids.PeerTypeChat, peer.ChatID, action.Photo)}},
+			})
+			if err := resultToError(res); err != nil {
+				return err
+			}
+		case *tg.PeerChannel:
+			res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatInfoChange{
+				EventMeta:      eventMeta.WithType(bridgev2.RemoteEventChatInfoChange),
+				ChatInfoChange: &bridgev2.ChatInfoChange{ChatInfo: &bridgev2.ChatInfo{Avatar: t.avatarFromPhoto(ctx, ids.PeerTypeChannel, peer.ChannelID, action.Photo)}},
+			})
+			if err := resultToError(res); err != nil {
+				return err
+			}
+		}
+
+	case *tg.MessageActionChatDeletePhoto:
+		res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatInfoChange{
+			EventMeta:      eventMeta.WithType(bridgev2.RemoteEventChatInfoChange),
+			ChatInfoChange: &bridgev2.ChatInfoChange{ChatInfo: &bridgev2.ChatInfo{Avatar: &bridgev2.Avatar{Remove: true}}},
+		})
+		if err := resultToError(res); err != nil {
+			return err
+		}
+	case *tg.MessageActionChatAddUser:
+		memberChanges := &bridgev2.ChatMemberList{
+			MemberMap: map[networkid.UserID]bridgev2.ChatMember{},
+		}
+		for _, userID := range action.Users {
+			memberChanges.MemberMap[ids.MakeUserID(userID)] = bridgev2.ChatMember{
+				EventSender: t.senderForUserID(userID),
+				Membership:  event.MembershipJoin,
+			}
+		}
+		res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatInfoChange{
+			EventMeta:      eventMeta.WithType(bridgev2.RemoteEventChatInfoChange),
+			ChatInfoChange: &bridgev2.ChatInfoChange{MemberChanges: memberChanges},
+		})
+		if err := resultToError(res); err != nil {
+			return err
+		}
+	case *tg.MessageActionChatJoinedByLink:
+		res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatInfoChange{
+			EventMeta: eventMeta.WithType(bridgev2.RemoteEventChatInfoChange),
+			ChatInfoChange: &bridgev2.ChatInfoChange{
+				MemberChanges: &bridgev2.ChatMemberList{
+					MemberMap: map[networkid.UserID]bridgev2.ChatMember{
+						sender.Sender: {EventSender: sender, Membership: event.MembershipJoin},
+					},
+				},
+			},
+		})
+		if err := resultToError(res); err != nil {
+			return err
+		}
+	case *tg.MessageActionChatDeleteUser:
+		if action.UserID == t.telegramUserID {
+			return t.selfLeaveChat(eventMeta.PortalKey)
+		}
+		res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatInfoChange{
+			EventMeta: eventMeta.WithType(bridgev2.RemoteEventChatInfoChange),
+			ChatInfoChange: &bridgev2.ChatInfoChange{
+				MemberChanges: &bridgev2.ChatMemberList{
+					MemberMap: map[networkid.UserID]bridgev2.ChatMember{
+						ids.MakeUserID(action.UserID): {
+							EventSender: t.senderForUserID(action.UserID),
+							Membership:  event.MembershipLeave,
+						},
+					},
+				},
+			},
+		})
+		if err := resultToError(res); err != nil {
+			return err
+		}
+	case *tg.MessageActionChatCreate:
+		memberMap := map[networkid.UserID]bridgev2.ChatMember{}
+		for _, userID := range action.Users {
+			memberMap[ids.MakeUserID(userID)] = bridgev2.ChatMember{
+				EventSender: t.senderForUserID(userID),
+				Membership:  event.MembershipJoin,
+			}
+		}
+
+		res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatResync{
+			EventMeta: eventMeta.
+				WithType(bridgev2.RemoteEventChatResync).
+				WithCreatePortal(true),
+			ChatInfo: &bridgev2.ChatInfo{
+				Name: &action.Title,
+				Members: &bridgev2.ChatMemberList{
+					IsFull:           true,
+					TotalMemberCount: len(action.Users),
+					MemberMap:        memberMap,
+				},
+				CanBackfill: true,
+			},
+		})
+		if err := resultToError(res); err != nil {
+			return err
+		}
+		res = t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.Message[any]{
+			EventMeta: eventMeta.WithType(bridgev2.RemoteEventMessage),
+			ID:        ids.GetMessageIDFromMessage(msg),
+			ConvertMessageFunc: func(ctx context.Context, portal *bridgev2.Portal, intent bridgev2.MatrixAPI, data any) (*bridgev2.ConvertedMessage, error) {
+				return &bridgev2.ConvertedMessage{
+					Parts: []*bridgev2.ConvertedMessagePart{
+						{
+							Type:    event.EventMessage,
+							Content: &event.MessageEventContent{MsgType: event.MsgNotice, Body: "Created the group"},
+						},
+					},
+				}, nil
+			},
+		})
+		if err := resultToError(res); err != nil {
+			return err
+		}
+
+	case *tg.MessageActionChannelCreate:
+		modLevel := 50
+		res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatResync{
+			EventMeta: eventMeta.
+				WithType(bridgev2.RemoteEventChatResync).
+				WithCreatePortal(true),
+			ChatInfo: &bridgev2.ChatInfo{
+				Name: &action.Title,
+				Members: &bridgev2.ChatMemberList{
+					MemberMap: map[networkid.UserID]bridgev2.ChatMember{
+						t.userID: {
+							EventSender: t.mySender(),
+							Membership:  event.MembershipJoin,
+							PowerLevel:  &modLevel,
+						},
+					},
+					PowerLevels: &bridgev2.PowerLevelOverrides{
+						EventsDefault: &modLevel,
+					},
+				},
+				CanBackfill: true,
+			},
+		})
+		if err := resultToError(res); err != nil {
+			return err
+		}
+		res = t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.Message[any]{
+			EventMeta: eventMeta.WithType(bridgev2.RemoteEventMessage),
+			ID:        ids.GetMessageIDFromMessage(msg),
+			ConvertMessageFunc: func(ctx context.Context, portal *bridgev2.Portal, intent bridgev2.MatrixAPI, data any) (*bridgev2.ConvertedMessage, error) {
+				return &bridgev2.ConvertedMessage{
+					Parts: []*bridgev2.ConvertedMessagePart{
+						{
+							Type:    event.EventMessage,
+							Content: &event.MessageEventContent{MsgType: event.MsgNotice, Body: "Created the group"},
+						},
+					},
+				}, nil
+			},
+		})
+		if err := resultToError(res); err != nil {
+			return err
+		}
+	case *tg.MessageActionSetMessagesTTL:
+		setting := database.DisappearingSetting{
+			Type:  event.DisappearingTypeAfterSend,
+			Timer: time.Duration(action.Period) * time.Second,
+		}.Normalize()
+		res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatInfoChange{
+			EventMeta: eventMeta.WithType(bridgev2.RemoteEventChatInfoChange),
+			ChatInfoChange: &bridgev2.ChatInfoChange{
+				ChatInfo: &bridgev2.ChatInfo{
+					Disappear: &setting,
+				},
+			},
+		})
+		if err := resultToError(res); err != nil {
+			return err
+		}
+	case *tg.MessageActionPhoneCall:
+		var body strings.Builder
+		if action.Video {
+			body.WriteString("Video call ")
+		} else {
+			body.WriteString("Call ")
+		}
+		switch action.Reason.TypeID() {
+		case tg.PhoneCallDiscardReasonMissedTypeID:
+			body.WriteString("missed")
+		case tg.PhoneCallDiscardReasonDisconnectTypeID:
+			body.WriteString("disconnected")
+		case tg.PhoneCallDiscardReasonHangupTypeID:
+			body.WriteString("ended")
+		case tg.PhoneCallDiscardReasonBusyTypeID:
+			body.WriteString("rejected")
+		default:
+			log.Warn().Stringer("end_reason", action.Reason).Msg("Unknown call end reason")
+			return nil
+		}
+
+		if action.Duration > 0 {
+			body.WriteString(" (")
+			body.WriteString(exfmt.Duration(time.Duration(action.Duration) * time.Second))
+			body.WriteString(")")
+		}
+
+		res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.Message[any]{
+			EventMeta: eventMeta.WithType(bridgev2.RemoteEventMessage),
+			ID:        ids.GetMessageIDFromMessage(msg),
+			ConvertMessageFunc: func(ctx context.Context, portal *bridgev2.Portal, intent bridgev2.MatrixAPI, data any) (*bridgev2.ConvertedMessage, error) {
+				return &bridgev2.ConvertedMessage{
+					Parts: []*bridgev2.ConvertedMessagePart{
+						{
+							Type:    event.EventMessage,
+							Content: &event.MessageEventContent{MsgType: event.MsgNotice, Body: body.String()},
+						},
+					},
+				}, nil
+			},
+		})
+		if err := resultToError(res); err != nil {
+			return err
+		}
+	case *tg.MessageActionGroupCall:
+		var body strings.Builder
+		if action.Duration == 0 {
+			body.WriteString("Started a video chat")
+		} else {
+			body.WriteString("Ended the video chat")
+			body.WriteString(" (")
+			body.WriteString(exfmt.Duration(time.Duration(action.Duration) * time.Second))
+			body.WriteString(")")
+		}
+
+		res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.Message[any]{
+			EventMeta: eventMeta.WithType(bridgev2.RemoteEventMessage),
+			ID:        ids.GetMessageIDFromMessage(msg),
+			ConvertMessageFunc: func(ctx context.Context, portal *bridgev2.Portal, intent bridgev2.MatrixAPI, data any) (*bridgev2.ConvertedMessage, error) {
+				return &bridgev2.ConvertedMessage{
+					Parts: []*bridgev2.ConvertedMessagePart{
+						{
+							Type:    event.EventMessage,
+							Content: &event.MessageEventContent{MsgType: event.MsgNotice, Body: body.String()},
+						},
+					},
+				}, nil
+			},
+		})
+		if err := resultToError(res); err != nil {
+			return err
+		}
+	case *tg.MessageActionInviteToGroupCall:
+		var body, html strings.Builder
+		var mentions event.Mentions
+		body.WriteString("Invited ")
+		html.WriteString("Invited ")
+		for i, userID := range action.Users {
+			if i > 0 {
+				body.WriteString(", ")
+			}
+
+			if ghost, err := t.main.Bridge.GetGhostByID(ctx, ids.MakeUserID(userID)); err != nil {
+				return err
+			} else {
+				var name string
+				if username, err := t.ScopedStore.GetUsername(ctx, ids.PeerTypeUser, userID); err != nil {
+					name = "@" + username
+				} else {
+					name = ghost.Name
+				}
+
+				mentions.UserIDs = append(mentions.UserIDs, ghost.Intent.GetMXID())
+				body.WriteString(name)
+				html.WriteString(fmt.Sprintf(`<a href="%s">@%s</a>`, ghost.Intent.GetMXID().URI().MatrixToURL(), name))
+			}
+		}
+		body.WriteString(" to the video chat")
+		html.WriteString(" to the video chat")
+		res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.Message[any]{
+			EventMeta: eventMeta.WithType(bridgev2.RemoteEventMessage),
+			ID:        ids.GetMessageIDFromMessage(msg),
+			ConvertMessageFunc: func(ctx context.Context, portal *bridgev2.Portal, intent bridgev2.MatrixAPI, data any) (*bridgev2.ConvertedMessage, error) {
+				return &bridgev2.ConvertedMessage{
+					Parts: []*bridgev2.ConvertedMessagePart{
+						{
+							Type: event.EventMessage,
+							Content: &event.MessageEventContent{
+								MsgType:       event.MsgNotice,
+								Body:          body.String(),
+								Format:        event.FormatHTML,
+								FormattedBody: html.String(),
+								Mentions:      &mentions,
+							},
+						},
+					},
+				}, nil
+			},
+		})
+		if err := resultToError(res); err != nil {
+			return err
+		}
+	case *tg.MessageActionGroupCallScheduled:
+		start := time.Unix(int64(action.ScheduleDate), 0)
+		res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.Message[any]{
+			EventMeta: eventMeta.
+				WithType(bridgev2.RemoteEventMessage).
+				WithSender(bridgev2.EventSender{}), // Telegram shows it as not coming from a specific user
+			ID: ids.GetMessageIDFromMessage(msg),
+			ConvertMessageFunc: func(ctx context.Context, portal *bridgev2.Portal, intent bridgev2.MatrixAPI, data any) (*bridgev2.ConvertedMessage, error) {
+				return &bridgev2.ConvertedMessage{
+					Parts: []*bridgev2.ConvertedMessagePart{
+						{
+							Type: event.EventMessage,
+							Content: &event.MessageEventContent{
+								MsgType: event.MsgNotice,
+								Body:    fmt.Sprintf("Video chat scheduled for %s", start.Format("Jan 2, 15:04")),
+							},
+						},
+					},
+				}, nil
+			},
+		})
+		if err := resultToError(res); err != nil {
+			return err
+		}
+
+	case *tg.MessageActionChatMigrateTo:
+		log.Debug().Int64("channel_id", action.ChannelID).Msg("MessageActionChatMigrateTo")
+		newPortalKey := t.makePortalKeyFromID(ids.PeerTypeChannel, action.ChannelID)
+		if err := t.migrateChat(ctx, eventMeta.PortalKey, newPortalKey); err != nil {
+			log.Err(err).Msg("Failed to migrate chat to channel")
+			return err
+		}
+		res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.Message[any]{
+			EventMeta: eventMeta.
+				WithPortalKey(newPortalKey).
+				WithStreamOrder(0).
+				WithType(bridgev2.RemoteEventMessage),
+			ID: ids.GetMessageIDFromMessage(msg),
+			ConvertMessageFunc: func(ctx context.Context, portal *bridgev2.Portal, intent bridgev2.MatrixAPI, data any) (*bridgev2.ConvertedMessage, error) {
+				return &bridgev2.ConvertedMessage{
+					Parts: []*bridgev2.ConvertedMessagePart{
+						{
+							Type: event.EventMessage,
+							Content: &event.MessageEventContent{
+								MsgType: event.MsgNotice,
+								Body:    "Upgraded this group to a supergroup",
+							},
+						},
+					},
+				}, nil
+			},
+		})
+		if err := resultToError(res); err != nil {
+			return err
+		}
+
+	// case *tg.MessageActionChannelMigrateFrom:
+
+	// case *tg.MessageActionPinMessage:
+	// case *tg.MessageActionHistoryClear:
+	// case *tg.MessageActionGameScore:
+	// case *tg.MessageActionPaymentSentMe:
+	// case *tg.MessageActionPaymentSent:
+	// case *tg.MessageActionScreenshotTaken:
+	// case *tg.MessageActionCustomAction:
+	// case *tg.MessageActionBotAllowed:
+	// case *tg.MessageActionSecureValuesSentMe:
+	// case *tg.MessageActionSecureValuesSent:
+	// case *tg.MessageActionContactSignUp:
+	// case *tg.MessageActionGeoProximityReached:
+	// case *tg.MessageActionSetChatTheme:
+	// case *tg.MessageActionChatJoinedByRequest:
+	// case *tg.MessageActionWebViewDataSentMe:
+	// case *tg.MessageActionWebViewDataSent:
+	// case *tg.MessageActionGiftPremium:
+	// case *tg.MessageActionTopicCreate:
+	// case *tg.MessageActionTopicEdit:
+	// case *tg.MessageActionSuggestProfilePhoto:
+	// case *tg.MessageActionRequestedPeer:
+	// case *tg.MessageActionSetChatWallPaper:
+	// case *tg.MessageActionGiftCode:
+	// case *tg.MessageActionGiveawayLaunch:
+	// case *tg.MessageActionGiveawayResults:
+	// case *tg.MessageActionBoostApply:
+	// case *tg.MessageActionRequestedPeerSentMe:
+	default:
+		log.Warn().
+			Type("action_type", action).
+			Msg("ignoring unknown action type")
 	}
 	return nil
 }

@@ -126,6 +126,7 @@ func (t *TelegramClient) onUpdateChannel(ctx context.Context, e tg.Entities, upd
 
 func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, entities tg.Entities, update IGetMessage) error {
 	log := *zerolog.Ctx(ctx)
+	log.Trace().Any("message_content", update).Msg("Raw message content")
 	switch msg := update.GetMessage().(type) {
 	case *tg.Message:
 		var isBroadcastChannel bool
@@ -223,16 +224,20 @@ func (t *TelegramClient) handleServiceMessage(ctx context.Context, msg *tg.Messa
 		switch peer := msg.PeerID.(type) {
 		case *tg.PeerChat:
 			res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatInfoChange{
-				EventMeta:      eventMeta.WithType(bridgev2.RemoteEventChatInfoChange),
-				ChatInfoChange: &bridgev2.ChatInfoChange{ChatInfo: &bridgev2.ChatInfo{Avatar: t.avatarFromPhoto(ctx, ids.PeerTypeChat, peer.ChatID, action.Photo)}},
+				EventMeta: eventMeta.WithType(bridgev2.RemoteEventChatInfoChange),
+				ChatInfoChange: &bridgev2.ChatInfoChange{ChatInfo: &bridgev2.ChatInfo{
+					Avatar: t.avatarFromPhoto(ctx, ids.PeerTypeChat, peer.ChatID, action.Photo),
+				}},
 			})
 			if err := resultToError(res); err != nil {
 				return err
 			}
 		case *tg.PeerChannel:
 			res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatInfoChange{
-				EventMeta:      eventMeta.WithType(bridgev2.RemoteEventChatInfoChange),
-				ChatInfoChange: &bridgev2.ChatInfoChange{ChatInfo: &bridgev2.ChatInfo{Avatar: t.avatarFromPhoto(ctx, ids.PeerTypeChannel, peer.ChannelID, action.Photo)}},
+				EventMeta: eventMeta.WithType(bridgev2.RemoteEventChatInfoChange),
+				ChatInfoChange: &bridgev2.ChatInfoChange{ChatInfo: &bridgev2.ChatInfo{
+					Avatar: t.avatarFromPhoto(ctx, ids.PeerTypeChannel, peer.ChannelID, action.Photo),
+				}},
 			})
 			if err := resultToError(res); err != nil {
 				return err
@@ -252,10 +257,10 @@ func (t *TelegramClient) handleServiceMessage(ctx context.Context, msg *tg.Messa
 			MemberMap: map[networkid.UserID]bridgev2.ChatMember{},
 		}
 		for _, userID := range action.Users {
-			memberChanges.MemberMap[ids.MakeUserID(userID)] = bridgev2.ChatMember{
+			memberChanges.MemberMap.Set(bridgev2.ChatMember{
 				EventSender: t.senderForUserID(userID),
 				Membership:  event.MembershipJoin,
-			}
+			})
 		}
 		res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatInfoChange{
 			EventMeta:      eventMeta.WithType(bridgev2.RemoteEventChatInfoChange),
@@ -269,9 +274,10 @@ func (t *TelegramClient) handleServiceMessage(ctx context.Context, msg *tg.Messa
 			EventMeta: eventMeta.WithType(bridgev2.RemoteEventChatInfoChange),
 			ChatInfoChange: &bridgev2.ChatInfoChange{
 				MemberChanges: &bridgev2.ChatMemberList{
-					MemberMap: map[networkid.UserID]bridgev2.ChatMember{
-						sender.Sender: {EventSender: sender, Membership: event.MembershipJoin},
-					},
+					MemberMap: bridgev2.ChatMemberMap{}.Set(bridgev2.ChatMember{
+						EventSender: sender,
+						Membership:  event.MembershipJoin,
+					}),
 				},
 			},
 		})
@@ -286,12 +292,10 @@ func (t *TelegramClient) handleServiceMessage(ctx context.Context, msg *tg.Messa
 			EventMeta: eventMeta.WithType(bridgev2.RemoteEventChatInfoChange),
 			ChatInfoChange: &bridgev2.ChatInfoChange{
 				MemberChanges: &bridgev2.ChatMemberList{
-					MemberMap: map[networkid.UserID]bridgev2.ChatMember{
-						ids.MakeUserID(action.UserID): {
-							EventSender: t.senderForUserID(action.UserID),
-							Membership:  event.MembershipLeave,
-						},
-					},
+					MemberMap: bridgev2.ChatMemberMap{}.Set(bridgev2.ChatMember{
+						EventSender: t.senderForUserID(action.UserID),
+						Membership:  event.MembershipLeave,
+					}),
 				},
 			},
 		})
@@ -299,42 +303,18 @@ func (t *TelegramClient) handleServiceMessage(ctx context.Context, msg *tg.Messa
 			return err
 		}
 	case *tg.MessageActionChatCreate:
-		memberMap := map[networkid.UserID]bridgev2.ChatMember{}
-		for _, userID := range action.Users {
-			memberMap[ids.MakeUserID(userID)] = bridgev2.ChatMember{
-				EventSender: t.senderForUserID(userID),
-				Membership:  event.MembershipJoin,
-			}
-		}
-
-		res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatResync{
-			EventMeta: eventMeta.
-				WithType(bridgev2.RemoteEventChatResync).
-				WithCreatePortal(true),
-			ChatInfo: &bridgev2.ChatInfo{
-				Name: &action.Title,
-				Members: &bridgev2.ChatMemberList{
-					IsFull:           true,
-					TotalMemberCount: len(action.Users),
-					MemberMap:        memberMap,
-				},
-				CanBackfill: true,
-			},
-		})
-		if err := resultToError(res); err != nil {
-			return err
-		}
-		res = t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.Message[any]{
-			EventMeta: eventMeta.WithType(bridgev2.RemoteEventMessage),
+		res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.Message[any]{
+			EventMeta: eventMeta.WithType(bridgev2.RemoteEventMessage).WithCreatePortal(true),
 			ID:        ids.GetMessageIDFromMessage(msg),
 			ConvertMessageFunc: func(ctx context.Context, portal *bridgev2.Portal, intent bridgev2.MatrixAPI, data any) (*bridgev2.ConvertedMessage, error) {
 				return &bridgev2.ConvertedMessage{
-					Parts: []*bridgev2.ConvertedMessagePart{
-						{
-							Type:    event.EventMessage,
-							Content: &event.MessageEventContent{MsgType: event.MsgNotice, Body: "Created the group"},
+					Parts: []*bridgev2.ConvertedMessagePart{{
+						Type: event.EventMessage,
+						Content: &event.MessageEventContent{
+							MsgType: event.MsgNotice,
+							Body:    "Created the group",
 						},
-					},
+					}},
 				}, nil
 			},
 		})
@@ -343,27 +323,11 @@ func (t *TelegramClient) handleServiceMessage(ctx context.Context, msg *tg.Messa
 		}
 
 	case *tg.MessageActionChannelCreate:
-		modLevel := 50
 		res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatResync{
 			EventMeta: eventMeta.
 				WithType(bridgev2.RemoteEventChatResync).
 				WithCreatePortal(true),
-			ChatInfo: &bridgev2.ChatInfo{
-				Name: &action.Title,
-				Members: &bridgev2.ChatMemberList{
-					MemberMap: map[networkid.UserID]bridgev2.ChatMember{
-						t.userID: {
-							EventSender: t.mySender(),
-							Membership:  event.MembershipJoin,
-							PowerLevel:  &modLevel,
-						},
-					},
-					PowerLevels: &bridgev2.PowerLevelOverrides{
-						EventsDefault: &modLevel,
-					},
-				},
-				CanBackfill: true,
-			},
+			GetChatInfoFunc: t.GetChatInfo,
 		})
 		if err := resultToError(res); err != nil {
 			return err
@@ -446,14 +410,11 @@ func (t *TelegramClient) handleServiceMessage(ctx context.Context, msg *tg.Messa
 			return err
 		}
 	case *tg.MessageActionGroupCall:
-		var body strings.Builder
+		var body string
 		if action.Duration == 0 {
-			body.WriteString("Started a video chat")
+			body = "Started a video chat"
 		} else {
-			body.WriteString("Ended the video chat")
-			body.WriteString(" (")
-			body.WriteString(exfmt.Duration(time.Duration(action.Duration) * time.Second))
-			body.WriteString(")")
+			body = fmt.Sprintf("Ended the video chat (%s)", exfmt.Duration(time.Duration(action.Duration)*time.Second))
 		}
 
 		res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.Message[any]{
@@ -461,12 +422,10 @@ func (t *TelegramClient) handleServiceMessage(ctx context.Context, msg *tg.Messa
 			ID:        ids.GetMessageIDFromMessage(msg),
 			ConvertMessageFunc: func(ctx context.Context, portal *bridgev2.Portal, intent bridgev2.MatrixAPI, data any) (*bridgev2.ConvertedMessage, error) {
 				return &bridgev2.ConvertedMessage{
-					Parts: []*bridgev2.ConvertedMessagePart{
-						{
-							Type:    event.EventMessage,
-							Content: &event.MessageEventContent{MsgType: event.MsgNotice, Body: body.String()},
-						},
-					},
+					Parts: []*bridgev2.ConvertedMessagePart{{
+						Type:    event.EventMessage,
+						Content: &event.MessageEventContent{MsgType: event.MsgNotice, Body: body},
+					}},
 				}, nil
 			},
 		})
@@ -505,18 +464,16 @@ func (t *TelegramClient) handleServiceMessage(ctx context.Context, msg *tg.Messa
 			ID:        ids.GetMessageIDFromMessage(msg),
 			ConvertMessageFunc: func(ctx context.Context, portal *bridgev2.Portal, intent bridgev2.MatrixAPI, data any) (*bridgev2.ConvertedMessage, error) {
 				return &bridgev2.ConvertedMessage{
-					Parts: []*bridgev2.ConvertedMessagePart{
-						{
-							Type: event.EventMessage,
-							Content: &event.MessageEventContent{
-								MsgType:       event.MsgNotice,
-								Body:          body.String(),
-								Format:        event.FormatHTML,
-								FormattedBody: html.String(),
-								Mentions:      &mentions,
-							},
+					Parts: []*bridgev2.ConvertedMessagePart{{
+						Type: event.EventMessage,
+						Content: &event.MessageEventContent{
+							MsgType:       event.MsgNotice,
+							Body:          body.String(),
+							Format:        event.FormatHTML,
+							FormattedBody: html.String(),
+							Mentions:      &mentions,
 						},
-					},
+					}},
 				}, nil
 			},
 		})
@@ -532,15 +489,13 @@ func (t *TelegramClient) handleServiceMessage(ctx context.Context, msg *tg.Messa
 			ID: ids.GetMessageIDFromMessage(msg),
 			ConvertMessageFunc: func(ctx context.Context, portal *bridgev2.Portal, intent bridgev2.MatrixAPI, data any) (*bridgev2.ConvertedMessage, error) {
 				return &bridgev2.ConvertedMessage{
-					Parts: []*bridgev2.ConvertedMessagePart{
-						{
-							Type: event.EventMessage,
-							Content: &event.MessageEventContent{
-								MsgType: event.MsgNotice,
-								Body:    fmt.Sprintf("Video chat scheduled for %s", start.Format("Jan 2, 15:04")),
-							},
+					Parts: []*bridgev2.ConvertedMessagePart{{
+						Type: event.EventMessage,
+						Content: &event.MessageEventContent{
+							MsgType: event.MsgNotice,
+							Body:    fmt.Sprintf("Video chat scheduled for %s", start.Format("Jan 2, 15:04")),
 						},
-					},
+					}},
 				}, nil
 			},
 		})
@@ -563,15 +518,13 @@ func (t *TelegramClient) handleServiceMessage(ctx context.Context, msg *tg.Messa
 			ID: ids.GetMessageIDFromMessage(msg),
 			ConvertMessageFunc: func(ctx context.Context, portal *bridgev2.Portal, intent bridgev2.MatrixAPI, data any) (*bridgev2.ConvertedMessage, error) {
 				return &bridgev2.ConvertedMessage{
-					Parts: []*bridgev2.ConvertedMessagePart{
-						{
-							Type: event.EventMessage,
-							Content: &event.MessageEventContent{
-								MsgType: event.MsgNotice,
-								Body:    "Upgraded this group to a supergroup",
-							},
+					Parts: []*bridgev2.ConvertedMessagePart{{
+						Type: event.EventMessage,
+						Content: &event.MessageEventContent{
+							MsgType: event.MsgNotice,
+							Body:    "Upgraded this group to a supergroup",
 						},
-					},
+					}},
 				}, nil
 			},
 		})

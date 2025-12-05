@@ -56,9 +56,6 @@ func (m *Manager) Handle(ctx context.Context, u tg.UpdatesClass) error {
 	ctx, span := m.tracer.Start(ctx, "updates.Manager.Handle")
 	defer span.End()
 
-	m.lg.Debug("Handle")
-	defer m.lg.Debug("Handled")
-
 	m.mux.Lock()
 	state := m.state
 	m.mux.Unlock()

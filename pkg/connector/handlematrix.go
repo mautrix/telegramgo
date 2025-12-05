@@ -651,7 +651,7 @@ func (t *TelegramClient) HandleMatrixReadReceipt(ctx context.Context, msg *bridg
 		return parseErr
 	}
 
-	var readMentionsErr, readReactionsErr, readMessagesErr, reactionPollErr error
+	var readMentionsErr, readReactionsErr, readMessagesErr error
 	var wg sync.WaitGroup
 
 	// Read mentions
@@ -717,11 +717,12 @@ func (t *TelegramClient) HandleMatrixReadReceipt(ctx context.Context, msg *bridg
 		}
 	}()
 
-	// Poll for reactions
-	wg.Add(1)
+	// Poll for reactions (non-blocking to avoid deadlock when portal event buffer is disabled)
 	go func() {
-		defer wg.Done()
-		reactionPollErr = t.maybePollForReactions(ctx, msg.Portal)
+		err := t.maybePollForReactions(ctx, msg.Portal)
+		if err != nil {
+			log.Err(err).Msg("failed to poll for reactions after read receipt")
+		}
 	}()
 
 	if peerType == ids.PeerTypeChannel && !msg.Portal.Metadata.(*PortalMetadata).FullSynced {
@@ -736,7 +737,7 @@ func (t *TelegramClient) HandleMatrixReadReceipt(ctx context.Context, msg *bridg
 	}
 
 	wg.Wait()
-	return errors.Join(readMentionsErr, readReactionsErr, readMessagesErr, reactionPollErr)
+	return errors.Join(readMentionsErr, readReactionsErr, readMessagesErr)
 }
 
 func (t *TelegramClient) HandleMatrixTyping(ctx context.Context, msg *bridgev2.MatrixTyping) error {

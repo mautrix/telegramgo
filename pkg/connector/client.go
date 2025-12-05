@@ -622,22 +622,9 @@ func (t *TelegramClient) getSingleChannel(ctx context.Context, id int64) (*tg.Ch
 }
 
 func (t *TelegramClient) IsLoggedIn() bool {
-	if t == nil || t.clientCtx == nil {
-		return false
-	}
-	select {
-	case <-t.clientCtx.Done():
-		t.main.Bridge.Log.Debug().
-			Bool("client_context_done", true).
-			Msg("Checking if user is logged in")
-		return false
-	default:
-		t.main.Bridge.Log.Debug().
-			Bool("has_client", t.client != nil).
-			Bool("has_auth_key", t.userLogin.Metadata.(*UserLoginMetadata).Session.HasAuthKey()).
-			Msg("Checking if user is logged in")
-		return t.client != nil && t.userLogin.Metadata.(*UserLoginMetadata).Session.HasAuthKey()
-	}
+	// TODO use less hacky check than context cancellation
+	return t != nil && t.clientCtx != nil && t.client != nil && t.clientCtx.Err() == nil &&
+		t.userLogin.Metadata.(*UserLoginMetadata).Session.HasAuthKey()
 }
 
 func (t *TelegramClient) LogoutRemote(ctx context.Context) {

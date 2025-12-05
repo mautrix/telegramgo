@@ -268,63 +268,63 @@ func (t *TelegramClient) pollForReactions(ctx context.Context, portalKey network
 	}
 
 	for _, update := range updates.Updates {
-		if reaction, ok := update.(*tg.UpdateMessageReactions); ok {
-			dbMsg, err := t.main.Bridge.DB.Message.GetFirstPartByID(ctx, t.loginID, ids.MakeMessageID(portalKey, reaction.MsgID))
-			if err != nil {
-				return fmt.Errorf("failed to get message from database: %w", err)
-			} else if dbMsg == nil {
-				return fmt.Errorf("message not found in database: %w", err)
-			}
-
-			reactionsList, isFull, customEmojis, err := t.computeReactionsList(ctx, reaction.Peer, reaction.MsgID, reaction.Reactions)
-			if err != nil {
-				return fmt.Errorf("failed to compute reactions list: %w", err)
-			}
-
-			users := map[networkid.UserID]*bridgev2.ReactionSyncUser{}
-			for _, reaction := range reactionsList {
-				peer, ok := reaction.PeerID.(*tg.PeerUser)
-				if !ok {
-					return fmt.Errorf("unknown peer type %T", reaction.PeerID)
-				}
-				userID := ids.MakeUserID(peer.UserID)
-				reactionLimit, err := t.getReactionLimit(ctx, userID)
-				if err != nil {
-					reactionLimit = 1
-					log.Err(err).Int64("id", peer.UserID).Msg("failed to get reaction limit")
-				}
-				if _, ok := users[userID]; !ok {
-					users[userID] = &bridgev2.ReactionSyncUser{HasAllReactions: isFull, MaxCount: reactionLimit}
-				}
-
-				emojiID, emoji, err := computeEmojiAndID(reaction.Reaction, customEmojis)
-				if err != nil {
-					return fmt.Errorf("failed to compute emoji and ID: %w", err)
-				}
-
-				users[userID].Reactions = append(users[userID].Reactions, &bridgev2.BackfillReaction{
-					Timestamp: time.Unix(int64(reaction.Date), 0),
-					Sender:    t.senderForUserID(peer.UserID),
-					EmojiID:   emojiID,
-					Emoji:     emoji,
-				})
-			}
-			res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ReactionSync{
-				EventMeta: simplevent.EventMeta{
-					Type: bridgev2.RemoteEventReactionSync,
-					LogContext: func(c zerolog.Context) zerolog.Context {
-						return c.Int("message_id", reaction.MsgID)
-					},
-					PortalKey: dbMsg.Room,
-				},
-				TargetMessage: dbMsg.ID,
-				Reactions:     &bridgev2.ReactionSyncData{Users: users, HasAllUsers: isFull},
-			})
-			if err := resultToError(res); err != nil {
-				return err
-			}
-		} else {
+		reaction, ok := update.(*tg.UpdateMessageReactions)
+		if !ok {
 			log.Warn().Type("update_type", update).Msg("Unexpected update type in get reactions response")
+		}
+		dbMsg, err := t.main.Bridge.DB.Message.GetFirstPartByID(ctx, t.loginID, ids.MakeMessageID(portalKey, reaction.MsgID))
+		if err != nil {
+			return fmt.Errorf("failed to get message from database: %w", err)
+		} else if dbMsg == nil {
+			return fmt.Errorf("message not found in database: %w", err)
+		}
+
+		reactionsList, isFull, customEmojis, err := t.computeReactionsList(ctx, reaction.Peer, reaction.MsgID, reaction.Reactions)
+		if err != nil {
+			return fmt.Errorf("failed to compute reactions list: %w", err)
+		}
+
+		users := map[networkid.UserID]*bridgev2.ReactionSyncUser{}
+		for _, reaction := range reactionsList {
+			peer, ok := reaction.PeerID.(*tg.PeerUser)
+			if !ok {
+				return fmt.Errorf("unknown peer type %T", reaction.PeerID)
+			}
+			userID := ids.MakeUserID(peer.UserID)
+			reactionLimit, err := t.getReactionLimit(ctx, userID)
+			if err != nil {
+				reactionLimit = 1
+				log.Err(err).Int64("id", peer.UserID).Msg("failed to get reaction limit")
+			}
+			if _, ok := users[userID]; !ok {
+				users[userID] = &bridgev2.ReactionSyncUser{HasAllReactions: isFull, MaxCount: reactionLimit}
+			}
+
+			emojiID, emoji, err := computeEmojiAndID(reaction.Reaction, customEmojis)
+			if err != nil {
+				return fmt.Errorf("failed to compute emoji and ID: %w", err)
+			}
+
+			users[userID].Reactions = append(users[userID].Reactions, &bridgev2.BackfillReaction{
+				Timestamp: time.Unix(int64(reaction.Date), 0),
+				Sender:    t.senderForUserID(peer.UserID),
+				EmojiID:   emojiID,
+				Emoji:     emoji,
+			})
+		}
+		res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ReactionSync{
+			EventMeta: simplevent.EventMeta{
+				Type: bridgev2.RemoteEventReactionSync,
+				LogContext: func(c zerolog.Context) zerolog.Context {
+					return c.Int("message_id", reaction.MsgID)
+				},
+				PortalKey: dbMsg.Room,
+			},
+			TargetMessage: dbMsg.ID,
+			Reactions:     &bridgev2.ReactionSyncData{Users: users, HasAllUsers: isFull},
+		})
+		if err := resultToError(res); err != nil {
+			return err
 		}
 	}
 	return nil

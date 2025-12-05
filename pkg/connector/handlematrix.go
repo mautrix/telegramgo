@@ -104,7 +104,7 @@ func (t *TelegramClient) HandleMatrixViewingChat(ctx context.Context, msg *bridg
 			GetChatInfoFunc: t.GetChatInfo,
 		})
 	}
-	return nil
+	return t.maybePollForReactions(ctx, msg.Portal)
 }
 
 func (t *TelegramClient) transferMediaToTelegram(ctx context.Context, content *event.MessageEventContent, sticker bool) (tg.InputMediaClass, error) {
@@ -721,20 +721,7 @@ func (t *TelegramClient) HandleMatrixReadReceipt(ctx context.Context, msg *bridg
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if peerType != ids.PeerTypeChannel || msg.Portal.Metadata.(*PortalMetadata).IsSuperGroup {
-			log.Debug().Msg("Not polling reactions because peer is not a channel or is a super-group")
-			return
-		}
-
-		// If it hasn't been 20 seconds since the last poll, skip
-		now := time.Now()
-		if prev, ok := t.prevReactionPoll[msg.Portal.PortalKey]; ok && now.Before(prev.Add(20*time.Second)) {
-			log.Debug().Msg("Not polling reactions because last poll was less than 20 seconds ago")
-			return
-		}
-		t.prevReactionPoll[msg.Portal.PortalKey] = now
-
-		reactionPollErr = t.pollForReactions(ctx, msg.Portal.PortalKey, inputPeer)
+		reactionPollErr = t.maybePollForReactions(ctx, msg.Portal)
 	}()
 
 	if peerType == ids.PeerTypeChannel && !msg.Portal.Metadata.(*PortalMetadata).FullSynced {

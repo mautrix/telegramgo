@@ -106,7 +106,8 @@ type TelegramClient struct {
 	stopTakeoutTimer   *time.Timer
 	takeoutDialogsOnce sync.Once
 
-	prevReactionPoll map[networkid.PortalKey]time.Time
+	prevReactionPoll     map[networkid.PortalKey]time.Time
+	prevReactionPollLock sync.Mutex
 }
 
 var _ bridgev2.NetworkAPI = (*TelegramClient)(nil)

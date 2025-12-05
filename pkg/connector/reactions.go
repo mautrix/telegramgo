@@ -205,7 +205,30 @@ func (t *TelegramClient) getReactionLimit(ctx context.Context, sender networkid.
 	}
 }
 
-func (t *TelegramClient) pollForReactions(ctx context.Context, portalKey networkid.PortalKey, inputPeer tg.InputPeerClass) error {
+func (t *TelegramClient) maybePollForReactions(ctx context.Context, portal *bridgev2.Portal) error {
+	// Only poll for reactions in supergroups
+	if portal == nil || !portal.Metadata.(*PortalMetadata).IsSuperGroup {
+		return nil
+	}
+
+	t.prevReactionPollLock.Lock()
+	prev, ok := t.prevReactionPoll[portal.PortalKey]
+	if ok && time.Since(prev) > 20*time.Second {
+		ok = false
+		t.prevReactionPoll[portal.PortalKey] = time.Now()
+	}
+	t.prevReactionPollLock.Unlock()
+	if ok {
+		return nil
+	}
+	return t.pollForReactions(ctx, portal.PortalKey)
+}
+
+func (t *TelegramClient) pollForReactions(ctx context.Context, portalKey networkid.PortalKey) error {
+	inputPeer, parseErr := t.inputPeerForPortalID(ctx, portalKey.ID)
+	if parseErr != nil {
+		return parseErr
+	}
 	log := zerolog.Ctx(ctx).With().
 		Stringer("portal_key", portalKey).
 		Str("action", "poll_for_reactions").

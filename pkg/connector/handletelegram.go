@@ -675,10 +675,9 @@ func (t *TelegramClient) onUserName(ctx context.Context, e tg.Entities, update *
 
 	var userInfo bridgev2.UserInfo
 
-	if !ghost.Metadata.(*GhostMetadata).IsContact {
-		name := util.FormatFullName(update.FirstName, update.LastName, false, update.UserID)
-		userInfo.Name = &name
-	}
+	// TODO anti-contact-name logic
+	name := util.FormatFullName(update.FirstName, update.LastName, false, update.UserID)
+	userInfo.Name = &name
 
 	if len(update.Usernames) > 0 {
 		for _, ident := range ghost.Identifiers {
@@ -1251,6 +1250,10 @@ func (t *TelegramClient) onChatDefaultBannedRights(ctx context.Context, entities
 }
 
 func (t *TelegramClient) onPeerBlocked(ctx context.Context, e tg.Entities, update *tg.UpdatePeerBlocked) error {
+	// TODO fix this after adding storage for block status (getDMPowerLevels also needs updating)
+	if true {
+		return nil
+	}
 	var userID networkid.UserID
 	if peer, ok := update.PeerID.(*tg.PeerUser); ok {
 		userID = ids.MakeUserID(peer.UserID)
@@ -1264,13 +1267,6 @@ func (t *TelegramClient) onPeerBlocked(ctx context.Context, e tg.Entities, updat
 	if err != nil {
 		return err
 	}
-	ghost.UpdateInfo(ctx, &bridgev2.UserInfo{
-		ExtraUpdates: func(ctx context.Context, g *bridgev2.Ghost) bool {
-			updated := g.Metadata.(*GhostMetadata).Blocked != update.Blocked
-			g.Metadata.(*GhostMetadata).Blocked = update.Blocked
-			return updated
-		},
-	})
 
 	// Find portals that are DMs with the user
 	res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatResync{

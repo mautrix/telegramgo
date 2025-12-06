@@ -556,7 +556,8 @@ func getTopicInfoFromResponse(resp *tg.MessagesForumTopics, channelID int64, top
 
 func (t *TelegramClient) getDMPowerLevels(ghost *bridgev2.Ghost) *bridgev2.PowerLevelOverrides {
 	var plo bridgev2.PowerLevelOverrides
-	if ghost.Metadata.(*GhostMetadata).Blocked {
+	// TODO use per-login metadata for blocked status
+	if /*ghost.Metadata.(*GhostMetadata).Blocked*/ false {
 		// Don't allow sending messages to blocked users
 		plo.EventsDefault = superadminPowerLevel
 	} else {

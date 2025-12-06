@@ -23,15 +23,9 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
-	"go.mau.fi/util/exsync"
-	"go.mau.fi/zerozap"
-	"go.uber.org/zap"
 	"maunium.net/go/mautrix/bridgev2"
 
-	"go.mau.fi/mautrix-telegram/pkg/gotd/telegram"
-	"go.mau.fi/mautrix-telegram/pkg/gotd/telegram/auth"
 	"go.mau.fi/mautrix-telegram/pkg/gotd/telegram/auth/qrlogin"
-	"go.mau.fi/mautrix-telegram/pkg/gotd/telegram/updates"
 	"go.mau.fi/mautrix-telegram/pkg/gotd/tg"
 	"go.mau.fi/mautrix-telegram/pkg/gotd/tgerr"
 )
@@ -43,14 +37,7 @@ type qrAuthResult struct {
 }
 
 type QRLogin struct {
-	user       *bridgev2.User
-	main       *TelegramConnector
-	authData   UserLoginSession
-	authClient *telegram.Client
-
-	authClientCtx    context.Context
-	authClientCancel context.CancelFunc
-
+	*baseLogin
 	auth    chan qrAuthResult
 	qrToken chan qrlogin.Token
 }
@@ -60,66 +47,55 @@ const LoginStepIDShowQR = "fi.mau.telegram.login.show_qr"
 var _ bridgev2.LoginProcessDisplayAndWait = (*QRLogin)(nil) // For showing QR code
 var _ bridgev2.LoginProcessUserInput = (*QRLogin)(nil)      // For asking for password
 
-func (q *QRLogin) Cancel() {
-	if q.authClientCancel != nil {
-		q.authClientCancel()
-		<-q.authClientCtx.Done()
-	}
+func waitContextDone(ctx context.Context) error {
+	<-ctx.Done()
+	return ctx.Err()
 }
 
-func (q *QRLogin) Start(ctx context.Context) (*bridgev2.LoginStep, error) {
-	log := zerolog.Ctx(ctx).With().Str("component", "telegram_qr_login").Logger()
-	loggedIn := make(chan struct{})
+const LoginTimeout = 10 * time.Minute
 
+var ErrLoginTimeout = errors.New("login process timed out")
+
+func (ql *QRLogin) StartWithOverride(ctx context.Context, override *bridgev2.UserLogin) (*bridgev2.LoginStep, error) {
+	meta := override.Metadata.(*UserLoginMetadata)
+	if meta.IsBot {
+		return nil, fmt.Errorf("can't re-login to a bot account with QR login")
+	}
+	return ql.Start(ctx)
+}
+
+func (ql *QRLogin) Start(ctx context.Context) (*bridgev2.LoginStep, error) {
+	log := zerolog.Ctx(ctx).With().Str("component", "qr login").Logger()
+	ctx = log.WithContext(ctx)
+
+	loggedIn := make(chan struct{})
 	dispatcher := tg.NewUpdateDispatcher()
 	dispatcher.OnLoginToken(func(ctx context.Context, e tg.Entities, update *tg.UpdateLoginToken) error {
 		loggedIn <- struct{}{}
 		return nil
 	})
-	zaplog := zap.New(zerozap.NewWithLevels(log, zapLevelMap))
-	updateManager := updates.New(updates.Config{
-		Handler: dispatcher,
-		Logger:  zaplog.Named("login_update_manager"),
-	})
-	q.authClient = telegram.NewClient(q.main.Config.APIID, q.main.Config.APIHash, telegram.Options{
-		CustomSessionStorage: &q.authData,
-		UpdateHandler:        updateManager,
-		Logger:               zaplog,
-		Device:               q.main.deviceConfig(),
-	})
-
-	q.authClientCtx, q.authClientCancel = context.WithTimeoutCause(log.WithContext(context.Background()), time.Hour, errors.New("phone login took over one hour"))
-
-	initialized := exsync.NewEvent()
-	done := NewFuture[error]()
-	runTelegramClient(q.authClientCtx, q.authClient, initialized, done, func(ctx context.Context) error {
-		<-ctx.Done()
-		return ctx.Err()
-	})
-
-	log.Info().Msg("Waiting for client to connect.")
-	err := initialized.Wait(ctx)
+	err := ql.makeClient(ctx, &dispatcher)
 	if err != nil {
 		return nil, err
 	}
 
-	qr := qrlogin.NewQR(q.authClient.API(), q.main.Config.APIID, q.main.Config.APIHash, qrlogin.Options{
-		Migrate: q.authClient.MigrateTo,
+	qr := qrlogin.NewQR(ql.client.API(), ql.main.Config.APIID, ql.main.Config.APIHash, qrlogin.Options{
+		Migrate: ql.client.MigrateTo,
 	})
-	q.qrToken = make(chan qrlogin.Token)
-	q.auth = make(chan qrAuthResult)
+	ql.qrToken = make(chan qrlogin.Token)
+	ql.auth = make(chan qrAuthResult)
 	go func() {
-		auth, err := qr.Auth(q.authClientCtx, loggedIn, func(ctx context.Context, token qrlogin.Token) error {
-			q.qrToken <- token
+		auth, err := qr.Auth(ctx, loggedIn, func(ctx context.Context, token qrlogin.Token) error {
+			ql.qrToken <- token
 			return nil
 		})
 
-		q.auth <- qrAuthResult{false, auth, err}
+		ql.auth <- qrAuthResult{false, auth, err}
 	}()
 
 	// Wait for the first QR token and show it to the user.:
 	select {
-	case token := <-q.qrToken:
+	case token := <-ql.qrToken:
 		return &bridgev2.LoginStep{
 			Type:         bridgev2.LoginStepTypeDisplayAndWait,
 			StepID:       LoginStepIDShowQR,
@@ -130,20 +106,20 @@ func (q *QRLogin) Start(ctx context.Context) (*bridgev2.LoginStep, error) {
 			},
 		}, nil
 	case <-ctx.Done():
-		q.Cancel()
+		ql.Cancel()
 		return nil, ctx.Err()
-	case <-q.authClientCtx.Done():
-		return nil, q.authClientCtx.Err()
+	case <-ql.ctx.Done():
+		return nil, ql.ctx.Err()
 	}
 }
 
-func (q *QRLogin) Wait(ctx context.Context) (*bridgev2.LoginStep, error) {
-	if q.qrToken == nil {
+func (ql *QRLogin) Wait(ctx context.Context) (*bridgev2.LoginStep, error) {
+	if ql.qrToken == nil {
 		panic("qr token channel is nil")
 	}
 
 	select {
-	case token := <-q.qrToken:
+	case token := <-ql.qrToken:
 		// There's a new token, show it to the user.
 		return &bridgev2.LoginStep{
 			Type:         bridgev2.LoginStepTypeDisplayAndWait,
@@ -154,57 +130,23 @@ func (q *QRLogin) Wait(ctx context.Context) (*bridgev2.LoginStep, error) {
 				Data: token.URL(),
 			},
 		}, nil
-	case authResult := <-q.auth:
+	case authResult := <-ql.auth:
 		if tgerr.Is(authResult.Error, "SESSION_PASSWORD_NEEDED") {
-			return &bridgev2.LoginStep{
-				Type:         bridgev2.LoginStepTypeUserInput,
-				StepID:       LoginStepIDPassword,
-				Instructions: "Please enter your password",
-				UserInputParams: &bridgev2.LoginUserInputParams{
-					Fields: []bridgev2.LoginInputDataField{
-						{
-							Type: bridgev2.LoginInputFieldTypePassword,
-							ID:   LoginStepIDPassword,
-							Name: "Password",
-						},
-					},
-				},
-			}, nil
+			return passwordLoginStep, nil
 		} else if authResult.Error != nil {
+			ql.Cancel()
 			return nil, fmt.Errorf("failed to authenticate: %w", authResult.Error)
 		}
 
-		// Stop the login client
-		q.authClientCancel()
-
-		return finalizeLogin(ctx, q.user, authResult.Authorization, UserLoginMetadata{
-			Session: q.authData,
-		})
+		return ql.finalizeLogin(ctx, authResult.Authorization, nil)
 	case <-ctx.Done():
-		q.Cancel()
+		ql.Cancel()
 		return nil, ctx.Err()
-	case <-q.authClientCtx.Done():
-		return nil, q.authClientCtx.Err()
+	case <-ql.ctx.Done():
+		return nil, ql.ctx.Err()
 	}
 }
 
-func (q *QRLogin) SubmitUserInput(ctx context.Context, input map[string]string) (*bridgev2.LoginStep, error) {
-	password, ok := input[LoginStepIDPassword]
-	if !ok {
-		return nil, fmt.Errorf("unexpected state during phone login")
-	}
-	authorization, err := q.authClient.Auth().Password(q.authClientCtx, password)
-	if err != nil {
-		if errors.Is(err, auth.ErrPasswordInvalid) {
-			return nil, ErrInvalidPassword
-		}
-		return nil, fmt.Errorf("failed to submit password: %w", err)
-	}
-
-	// Stop the login client
-	q.authClientCancel()
-
-	return finalizeLogin(ctx, q.user, authorization, UserLoginMetadata{
-		Session: q.authData,
-	})
+func (ql *QRLogin) SubmitUserInput(ctx context.Context, input map[string]string) (*bridgev2.LoginStep, error) {
+	return ql.submitPassword(ctx, input[LoginStepIDPassword], "")
 }

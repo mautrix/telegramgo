@@ -18,21 +18,30 @@ package connector
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"sync"
 	"time"
 
+	"github.com/rs/zerolog"
+	"go.mau.fi/util/exsync"
+	"go.mau.fi/zerozap"
+	"go.uber.org/zap"
 	"maunium.net/go/mautrix/bridgev2"
 	"maunium.net/go/mautrix/bridgev2/database"
 
 	"go.mau.fi/mautrix-telegram/pkg/connector/ids"
+	"go.mau.fi/mautrix-telegram/pkg/gotd/telegram"
+	"go.mau.fi/mautrix-telegram/pkg/gotd/telegram/auth"
+	"go.mau.fi/mautrix-telegram/pkg/gotd/telegram/updates"
 	"go.mau.fi/mautrix-telegram/pkg/gotd/tg"
 )
 
 const (
-	LoginFlowIDPhone = "phone"
-	LoginFlowIDQR    = "qr"
+	LoginFlowIDPhone    = "phone"
+	LoginFlowIDQR       = "qr"
+	LoginFlowIDBotToken = "bot_token"
 
 	LoginStepIDComplete = "fi.mau.telegram.login.complete"
 )
@@ -71,73 +80,160 @@ func (tg *TelegramConnector) GetLoginFlows() []bridgev2.LoginFlow {
 }
 
 func (tg *TelegramConnector) CreateLogin(ctx context.Context, user *bridgev2.User, flowID string) (bridgev2.LoginProcess, error) {
+	bl := &baseLogin{
+		user:   user,
+		main:   tg,
+		flowID: flowID,
+	}
 	switch flowID {
 	case LoginFlowIDPhone:
-		return &PhoneLogin{user: user, main: tg}, nil
+		return &PhoneLogin{baseLogin: bl}, nil
 	case LoginFlowIDQR:
-		return &QRLogin{user: user, main: tg}, nil
+		return &QRLogin{baseLogin: bl}, nil
 	default:
 		return nil, fmt.Errorf("unknown flow ID %s", flowID)
 	}
 }
 
-func finalizeLogin(ctx context.Context, user *bridgev2.User, authorization *tg.AuthAuthorization, metadata UserLoginMetadata) (*bridgev2.LoginStep, error) {
+type baseLogin struct {
+	user    *bridgev2.User
+	main    *TelegramConnector
+	session UserLoginSession
+	client  *telegram.Client
+	ctx     context.Context
+	cancel  context.CancelFunc
+	flowID  string
+}
+
+func (bl *baseLogin) Cancel() {
+	if bl.cancel != nil {
+		bl.cancel()
+	}
+}
+
+func (bl *baseLogin) makeClient(ctx context.Context, dispatcher *tg.UpdateDispatcher) error {
+	log := zerolog.Ctx(ctx)
+	zaplog := zap.New(zerozap.NewWithLevels(*log, zapLevelMap))
+	var updateManager *updates.Manager
+	if dispatcher != nil {
+		updateManager = updates.New(updates.Config{
+			Handler: dispatcher,
+			Logger:  zaplog.Named("login_update_manager"),
+		})
+	}
+	bl.client = telegram.NewClient(bl.main.Config.APIID, bl.main.Config.APIHash, telegram.Options{
+		CustomSessionStorage: &bl.session,
+		Logger:               zaplog,
+		Device:               bl.main.deviceConfig(),
+		UpdateHandler:        updateManager,
+	})
+
+	bl.ctx, bl.cancel = context.WithTimeoutCause(log.WithContext(bl.main.Bridge.BackgroundCtx), LoginTimeout, ErrLoginTimeout)
+	initialized := exsync.NewEvent()
+	done := NewFuture[error]()
+	runTelegramClient(bl.ctx, bl.client, initialized, done, waitContextDone)
+
+	log.Debug().Msg("Waiting for client to connect")
+	err := initialized.Wait(ctx)
+	if err != nil {
+		bl.Cancel()
+		return err
+	}
+	return nil
+}
+
+var passwordLoginStep = &bridgev2.LoginStep{
+	Type:   bridgev2.LoginStepTypeUserInput,
+	StepID: LoginStepIDPassword,
+	UserInputParams: &bridgev2.LoginUserInputParams{
+		Fields: []bridgev2.LoginInputDataField{{
+			Type: bridgev2.LoginInputFieldTypePassword,
+			ID:   LoginStepIDPassword,
+			Name: "Password",
+		}},
+	},
+}
+
+func (bl *baseLogin) submitPassword(ctx context.Context, password, loginPhone string) (*bridgev2.LoginStep, error) {
+	if bl.client == nil {
+		return nil, fmt.Errorf("unexpected state: client is nil when submitting password")
+	} else if password == "" {
+		return nil, fmt.Errorf("password not provided")
+	}
+	authorization, err := bl.client.Auth().Password(ctx, password)
+	if err != nil {
+		if errors.Is(err, auth.ErrPasswordInvalid) {
+			// TODO re-prompt password instead of cancelling
+			bl.Cancel()
+			return nil, ErrInvalidPassword
+		}
+		bl.Cancel()
+		return nil, fmt.Errorf("failed to submit password: %w", err)
+	}
+	return bl.finalizeLogin(ctx, authorization, &UserLoginMetadata{LoginPhone: loginPhone})
+}
+
+func (bl *baseLogin) finalizeLogin(
+	ctx context.Context,
+	authorization *tg.AuthAuthorization,
+	metadata *UserLoginMetadata,
+) (*bridgev2.LoginStep, error) {
+	self, err := bl.client.Self(ctx)
+	bl.Cancel()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get self: %w", err)
+	}
+	if metadata == nil {
+		metadata = &UserLoginMetadata{}
+	}
+	metadata.Session = bl.session
+	metadata.LoginMethod = bl.flowID
+	profile, name := userToRemoteProfile(self, nil, nil)
 	userLoginID := ids.MakeUserLoginID(authorization.User.GetID())
-	ul, err := user.NewLogin(ctx, &database.UserLogin{
-		ID:       userLoginID,
-		Metadata: &metadata,
+	ul, err := bl.user.NewLogin(ctx, &database.UserLogin{
+		ID:            userLoginID,
+		Metadata:      metadata,
+		RemoteProfile: profile,
+		RemoteName:    name,
 	}, &bridgev2.NewLoginParams{
 		DeleteOnConflict: true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to save new login: %w", err)
 	}
-	ul.Client.Connect(ul.Log.WithContext(ctx))
+	ul.Client.Connect(ul.Log.WithContext(bl.main.Bridge.BackgroundCtx))
 	client := ul.Client.(*TelegramClient)
 
-	// Connecting is non-blocking so wait for gotd to initialize before doing anythign to avoid deadlocking
-	err = client.clientInitialized.Wait(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	me, err := client.client.Self(ctx)
-	if err != nil {
-		return nil, err
-	}
 	go func() {
-		log := ul.Log.With().Str("component", "login_sync_chats").Logger()
-		if err := client.SyncChats(log.WithContext(client.clientCtx)); err != nil {
+		log := ul.Log.With().Str("action", "post-login sync").Logger()
+		err := client.clientInitialized.Wait(ctx)
+		if err != nil {
+			log.Err(err).Msg("Failed to wait for client init to sync chats after login")
+		} else if err = client.SyncChats(log.WithContext(client.clientCtx)); err != nil {
 			log.Err(err).Msg("Failed to sync chats")
 		}
 	}()
 
 	go func() {
-		log := ul.Log.With().Str("component", "login_takeout").Logger()
+		log := ul.Log.With().Str("component", "post-login takeout").Logger()
 		client.takeoutLock.Lock()
 		defer client.takeoutLock.Unlock()
-		_, err = client.getTakeoutID(ctx)
+		err := client.clientInitialized.Wait(ctx)
 		if err != nil {
+			log.Err(err).Msg("Failed to wait for client init to start takeout")
+		} else if _, err = client.getTakeoutID(ctx); err != nil {
 			log.Err(err).Msg("Failed to get takeout")
-			return
-		}
-		if client.stopTakeoutTimer == nil {
+		} else if client.stopTakeoutTimer == nil {
 			client.stopTakeoutTimer = time.AfterFunc(max(time.Hour, time.Duration(client.main.Bridge.Config.Backfill.Queue.BatchDelay*2)), sync.OnceFunc(func() { client.stopTakeout(ctx) }))
 		} else {
 			client.stopTakeoutTimer.Reset(max(time.Hour, time.Duration(client.main.Bridge.Config.Backfill.Queue.BatchDelay*2)))
 		}
 	}()
 
-	ul.RemoteProfile, ul.RemoteName = userToRemoteProfile(me, nil, nil)
-	err = ul.Save(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to save login: %w", err)
-	}
-
 	return &bridgev2.LoginStep{
 		Type:         bridgev2.LoginStepTypeComplete,
 		StepID:       LoginStepIDComplete,
-		Instructions: fmt.Sprintf("Successfully logged in as %s (`%d`)", ul.RemoteName, me.ID),
+		Instructions: fmt.Sprintf("Successfully logged in as %s (`%d`)", ul.RemoteName, self.ID),
 		CompleteParams: &bridgev2.LoginCompleteParams{
 			UserLoginID: ul.ID,
 			UserLogin:   ul,

@@ -74,9 +74,11 @@ type MessageMetadata struct {
 }
 
 type UserLoginMetadata struct {
-	Phone     string           `json:"phone"`
-	Session   UserLoginSession `json:"session"`
-	TakeoutID int64            `json:"takeout_id,omitempty"`
+	LoginPhone  string           `json:"phone,omitempty"`
+	LoginMethod string           `json:"login_method,omitempty"`
+	IsBot       bool             `json:"is_bot,omitempty"`
+	Session     UserLoginSession `json:"session"`
+	TakeoutID   int64            `json:"takeout_id,omitempty"`
 
 	TakeoutDialogCrawlDone   bool               `json:"takeout_portal_crawl_done,omitempty"`
 	TakeoutDialogCrawlCursor networkid.PortalID `json:"takeout_portal_crawl_cursor,omitempty"`

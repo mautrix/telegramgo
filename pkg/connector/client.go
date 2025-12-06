@@ -551,6 +551,8 @@ func (t *TelegramClient) Connect(_ context.Context) {
 		return
 	}
 
+	t.userLogin.BridgeState.Send(status.BridgeState{StateEvent: status.StateConnecting})
+
 	log.Info().Msg("Connecting client")
 
 	// Add a cancellation layer we can use for explicit Disconnect
@@ -703,4 +705,14 @@ func (t *TelegramClient) senderForUserID(userID int64) bridgev2.EventSender {
 		SenderLogin: ids.MakeUserLoginID(userID),
 		Sender:      ids.MakeUserID(userID),
 	}
+}
+
+func (t *TelegramClient) FillBridgeState(state status.BridgeState) status.BridgeState {
+	if state.Info == nil {
+		state.Info = make(map[string]any)
+	}
+	meta := t.userLogin.Metadata.(*UserLoginMetadata)
+	state.Info["is_bot"] = meta.IsBot
+	state.Info["login_method"] = meta.LoginMethod
+	return state
 }

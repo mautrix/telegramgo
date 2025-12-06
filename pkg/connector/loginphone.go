@@ -17,18 +17,14 @@
 package connector
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/rs/zerolog"
-	"go.mau.fi/util/exsync"
-	"go.mau.fi/zerozap"
-	"go.uber.org/zap"
 	"maunium.net/go/mautrix/bridgev2"
 
-	"go.mau.fi/mautrix-telegram/pkg/gotd/telegram"
 	"go.mau.fi/mautrix-telegram/pkg/gotd/telegram/auth"
 	"go.mau.fi/mautrix-telegram/pkg/gotd/tg"
 )
@@ -40,145 +36,115 @@ const (
 )
 
 type PhoneLogin struct {
-	user             *bridgev2.User
-	main             *TelegramConnector
-	authData         UserLoginSession
-	authClient       *telegram.Client
-	authClientCtx    context.Context
-	authClientCancel context.CancelFunc
-
-	phone string
-	hash  string
+	*baseLogin
+	phone         string
+	hash          string
+	codeSubmitted bool
 }
 
-var _ bridgev2.LoginProcessUserInput = (*PhoneLogin)(nil)
+var (
+	_ bridgev2.LoginProcessUserInput    = (*PhoneLogin)(nil)
+	_ bridgev2.LoginProcessWithOverride = (*PhoneLogin)(nil)
+)
 
-func (p *PhoneLogin) Cancel() {
-	if p.authClientCancel != nil {
-		p.authClientCancel()
-		<-p.authClientCtx.Done()
+func (pl *PhoneLogin) StartWithOverride(ctx context.Context, override *bridgev2.UserLogin) (*bridgev2.LoginStep, error) {
+	meta := override.Metadata.(*UserLoginMetadata)
+	if meta.IsBot {
+		return nil, fmt.Errorf("can't re-login to a bot account with phone login")
 	}
+	phone := cmp.Or(meta.LoginPhone, override.RemoteProfile.Phone)
+	if phone != "" {
+		zerolog.Ctx(ctx).Debug().Str("phone_number", phone).Msg("Using existing phone number for relogin")
+		return pl.submitNumber(ctx, phone)
+	}
+	zerolog.Ctx(ctx).Debug().Msg("No existing phone number for relogin, re-prompting")
+	return pl.Start(ctx)
 }
 
-func (p *PhoneLogin) Start(ctx context.Context) (*bridgev2.LoginStep, error) {
+func (pl *PhoneLogin) Start(ctx context.Context) (*bridgev2.LoginStep, error) {
 	return &bridgev2.LoginStep{
-		Type:         bridgev2.LoginStepTypeUserInput,
-		StepID:       LoginStepIDPhoneNumber,
-		Instructions: "Please enter your phone number",
+		Type:   bridgev2.LoginStepTypeUserInput,
+		StepID: LoginStepIDPhoneNumber,
 		UserInputParams: &bridgev2.LoginUserInputParams{
-			Fields: []bridgev2.LoginInputDataField{
-				{
-					Type:        bridgev2.LoginInputFieldTypePhoneNumber,
-					ID:          LoginStepIDPhoneNumber,
-					Name:        "Phone Number",
-					Description: "Include the country code with +",
-				},
-			},
+			Fields: []bridgev2.LoginInputDataField{{
+				Type:        bridgev2.LoginInputFieldTypePhoneNumber,
+				ID:          LoginStepIDPhoneNumber,
+				Name:        "Phone number",
+				Description: "Include the country code with +",
+			}},
 		},
 	}, nil
 }
 
-func (p *PhoneLogin) SubmitUserInput(ctx context.Context, input map[string]string) (*bridgev2.LoginStep, error) {
-	log := zerolog.Ctx(ctx).With().Str("component", "telegram_phone_login").Logger()
-	if phone, ok := input[LoginStepIDPhoneNumber]; ok {
-		p.phone = phone
-		p.authClient = telegram.NewClient(p.main.Config.APIID, p.main.Config.APIHash, telegram.Options{
-			CustomSessionStorage: &p.authData,
-			Logger:               zap.New(zerozap.NewWithLevels(zerolog.Ctx(ctx).With().Str("component", "telegram_phone_login_client").Logger(), zapLevelMap)),
-			Device:               p.main.deviceConfig(),
-		})
-
-		p.authClientCtx, p.authClientCancel = context.WithTimeoutCause(log.WithContext(context.Background()), time.Hour, errors.New("phone login took over one hour"))
-		initialized := exsync.NewEvent()
-		done := NewFuture[error]()
-		runTelegramClient(p.authClientCtx, p.authClient, initialized, done, func(ctx context.Context) error {
-			<-ctx.Done()
-			return ctx.Err()
-		})
-
-		log.Info().Msg("Waiting for client to connect.")
-		err := initialized.Wait(ctx)
-		if err != nil {
-			return nil, err
-		}
-
-		sentCode, err := p.authClient.Auth().SendCode(p.authClientCtx, p.phone, auth.SendCodeOptions{})
-		if err != nil {
-			return nil, err
-		}
-		switch s := sentCode.(type) {
-		case *tg.AuthSentCode:
-			p.hash = s.PhoneCodeHash
-			return &bridgev2.LoginStep{
-				Type:         bridgev2.LoginStepTypeUserInput,
-				StepID:       LoginStepIDCode,
-				Instructions: "Please enter the code sent to the Telegram app on your phone",
-				UserInputParams: &bridgev2.LoginUserInputParams{
-					Fields: []bridgev2.LoginInputDataField{
-						{
-							Type: bridgev2.LoginInputFieldType2FACode,
-							ID:   LoginStepIDCode,
-							Name: "Code",
-						},
-					},
-				},
-			}, nil
-		case *tg.AuthSentCodeSuccess:
-			switch a := s.Authorization.(type) {
-			case *tg.AuthAuthorization:
-				// Looks that we are already authorized.
-				return p.handleAuthSuccess(ctx, a)
-			case *tg.AuthAuthorizationSignUpRequired:
-				return nil, fmt.Errorf("phone number does not correspond with an existing Telegram account and sign-up is not supported")
-			default:
-				return nil, fmt.Errorf("unexpected authorization type: %T", sentCode)
-			}
-		default:
-			return nil, fmt.Errorf("unexpected sent code type: %T", sentCode)
-		}
-	} else if code, ok := input[LoginStepIDCode]; ok {
-		authorization, err := p.authClient.Auth().SignIn(p.authClientCtx, p.phone, code, p.hash)
-		if errors.Is(err, auth.ErrPasswordAuthNeeded) {
-			return &bridgev2.LoginStep{
-				Type:         bridgev2.LoginStepTypeUserInput,
-				StepID:       LoginStepIDPassword,
-				Instructions: "Please enter your password",
-				UserInputParams: &bridgev2.LoginUserInputParams{
-					Fields: []bridgev2.LoginInputDataField{
-						{
-							Type: bridgev2.LoginInputFieldTypePassword,
-							ID:   LoginStepIDPassword,
-							Name: "Password",
-						},
-					},
-				},
-			}, nil
-		} else if errors.Is(err, auth.ErrPhoneCodeInvalid) {
-			return nil, ErrPhoneCodeInvalid
-		} else if errors.Is(err, &auth.SignUpRequired{}) {
-			return nil, ErrSignUpNotSupported
-		} else if err != nil {
-			return nil, fmt.Errorf("failed to submit code: %w", err)
-		}
-		return p.handleAuthSuccess(ctx, authorization)
-	} else if password, ok := input[LoginStepIDPassword]; ok {
-		authorization, err := p.authClient.Auth().Password(p.authClientCtx, password)
-		if err != nil {
-			if errors.Is(err, auth.ErrPasswordInvalid) {
-				return nil, ErrInvalidPassword
-			}
-			return nil, fmt.Errorf("failed to submit password: %w", err)
-		}
-		return p.handleAuthSuccess(ctx, authorization)
+func (pl *PhoneLogin) SubmitUserInput(ctx context.Context, input map[string]string) (*bridgev2.LoginStep, error) {
+	if pl.client == nil {
+		return pl.submitNumber(ctx, input[LoginStepIDPhoneNumber])
+	} else if pl.codeSubmitted {
+		return pl.submitPassword(ctx, input[LoginStepIDPassword], pl.phone)
+	} else {
+		return pl.submitCode(ctx, input[LoginStepIDCode])
 	}
-
-	return nil, fmt.Errorf("unexpected state during phone login")
 }
 
-func (p *PhoneLogin) handleAuthSuccess(ctx context.Context, authorization *tg.AuthAuthorization) (*bridgev2.LoginStep, error) {
-	defer p.authClientCancel()
-	return finalizeLogin(ctx, p.user, authorization, UserLoginMetadata{
-		Phone:   p.phone,
-		Session: p.authData,
-	})
+func (pl *PhoneLogin) submitNumber(ctx context.Context, phone string) (*bridgev2.LoginStep, error) {
+	if phone == "" {
+		return nil, fmt.Errorf("phone number is empty")
+	}
+	log := zerolog.Ctx(ctx).With().Str("component", "phone login").Logger()
+	ctx = log.WithContext(ctx)
+	pl.phone = phone
+	err := pl.makeClient(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	sentCode, err := pl.client.Auth().SendCode(ctx, pl.phone, auth.SendCodeOptions{})
+	if err != nil {
+		return nil, err
+	}
+	switch s := sentCode.(type) {
+	case *tg.AuthSentCode:
+		pl.hash = s.PhoneCodeHash
+		return &bridgev2.LoginStep{
+			Type:   bridgev2.LoginStepTypeUserInput,
+			StepID: LoginStepIDCode,
+			UserInputParams: &bridgev2.LoginUserInputParams{
+				Fields: []bridgev2.LoginInputDataField{{
+					Type:        bridgev2.LoginInputFieldType2FACode,
+					ID:          LoginStepIDCode,
+					Name:        "Code",
+					Description: "The code was sent to the Telegram app on your phone",
+				}},
+			},
+		}, nil
+	case *tg.AuthSentCodeSuccess:
+		switch authorization := s.Authorization.(type) {
+		case *tg.AuthAuthorization:
+			return pl.finalizeLogin(ctx, authorization, &UserLoginMetadata{LoginPhone: pl.phone})
+		case *tg.AuthAuthorizationSignUpRequired:
+			return nil, ErrSignUpNotSupported
+		default:
+			return nil, fmt.Errorf("unexpected authorization type: %T", sentCode)
+		}
+	default:
+		return nil, fmt.Errorf("unexpected sent code type: %T", sentCode)
+	}
+}
+
+func (pl *PhoneLogin) submitCode(ctx context.Context, code string) (*bridgev2.LoginStep, error) {
+	if pl.client == nil {
+		return nil, fmt.Errorf("unexpected state: client is nil when submitting phone code")
+	}
+	authorization, err := pl.client.Auth().SignIn(ctx, pl.phone, code, pl.hash)
+	if errors.Is(err, auth.ErrPasswordAuthNeeded) {
+		pl.codeSubmitted = true
+		return passwordLoginStep, nil
+	} else if errors.Is(err, auth.ErrPhoneCodeInvalid) {
+		return nil, ErrPhoneCodeInvalid
+	} else if errors.Is(err, &auth.SignUpRequired{}) {
+		return nil, ErrSignUpNotSupported
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to submit code: %w", err)
+	}
+	return pl.finalizeLogin(ctx, authorization, &UserLoginMetadata{LoginPhone: pl.phone})
 }

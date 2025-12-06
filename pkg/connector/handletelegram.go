@@ -1035,7 +1035,9 @@ func (t *TelegramClient) getAvailableReactionsForCapability(ctx context.Context)
 }
 
 func (t *TelegramClient) getAvailableReactions(ctx context.Context) (map[string]struct{}, error) {
-	if !t.IsLoggedIn() {
+	if t.metadata.IsBot {
+		return nil, nil
+	} else if !t.IsLoggedIn() {
 		return nil, errors.New("you must be logged in to get available reactions")
 	}
 

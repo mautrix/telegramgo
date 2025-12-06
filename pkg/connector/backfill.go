@@ -185,6 +185,9 @@ func (t *TelegramClient) stopTakeout(ctx context.Context) error {
 }
 
 func (t *TelegramClient) FetchMessages(ctx context.Context, fetchParams bridgev2.FetchMessagesParams) (*bridgev2.FetchMessagesResponse, error) {
+	if t.metadata.IsBot {
+		return nil, fmt.Errorf("bots cannot backfill messages")
+	}
 	log := zerolog.Ctx(ctx).With().Str("method", "FetchMessages").Logger()
 	ctx = log.WithContext(ctx)
 

@@ -555,11 +555,9 @@ func (t *TelegramClient) PreHandleMatrixReaction(ctx context.Context, msg *bridg
 		return resp, fmt.Errorf("failed to get available reactions: %w", err)
 	} else if _, ok := availableReactions[keyNoVariation]; ok {
 		log.Debug().Msg("Not using custom emoji reaction since the emoji is available")
-	} else {
-		if documentID, ok := emojis.GetEmojiDocumentID(keyNoVariation); ok {
-			log.Debug().Msg("Using custom emoji reaction")
-			emojiID = ids.MakeEmojiIDFromDocumentID(documentID)
-		}
+	} else if documentID, ok := emojis.GetEmojiDocumentID(keyNoVariation); ok && !t.metadata.IsBot {
+		log.Debug().Msg("Using custom emoji reaction")
+		emojiID = ids.MakeEmojiIDFromDocumentID(documentID)
 	}
 
 	log.Debug().Str("emoji_id", string(emojiID)).Msg("Pre-handled reaction")
@@ -684,10 +682,15 @@ func (t *TelegramClient) HandleMatrixReadReceipt(ctx context.Context, msg *bridg
 	var readMentionsErr, readReactionsErr, readMessagesErr error
 	var wg sync.WaitGroup
 
+	isBot := t.metadata.IsBot
+
 	// Read mentions
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		if isBot {
+			return
+		}
 		_, readMentionsErr = t.client.API().MessagesReadMentions(ctx, &tg.MessagesReadMentionsRequest{
 			Peer:     inputPeer,
 			TopMsgID: topicID,
@@ -698,6 +701,9 @@ func (t *TelegramClient) HandleMatrixReadReceipt(ctx context.Context, msg *bridg
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		if isBot {
+			return
+		}
 		_, readMentionsErr = t.client.API().MessagesReadReactions(ctx, &tg.MessagesReadReactionsRequest{
 			Peer:     inputPeer,
 			TopMsgID: topicID,
@@ -708,6 +714,10 @@ func (t *TelegramClient) HandleMatrixReadReceipt(ctx context.Context, msg *bridg
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+
+		if isBot {
+			return
+		}
 
 		message := msg.ExactMessage
 		if message == nil {

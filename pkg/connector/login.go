@@ -41,7 +41,7 @@ import (
 const (
 	LoginFlowIDPhone    = "phone"
 	LoginFlowIDQR       = "qr"
-	LoginFlowIDBotToken = "bot_token"
+	LoginFlowIDBotToken = "bot"
 
 	LoginStepIDComplete = "fi.mau.telegram.login.complete"
 )
@@ -76,6 +76,11 @@ func (tg *TelegramConnector) GetLoginFlows() []bridgev2.LoginFlow {
 			Description: "Login by scanning a QR code from your phone",
 			ID:          LoginFlowIDQR,
 		},
+		{
+			Name:        "Bot token",
+			Description: "Log in as a bot using the bot token provided by BotFather.",
+			ID:          LoginFlowIDBotToken,
+		},
 	}
 }
 
@@ -86,6 +91,8 @@ func (tg *TelegramConnector) CreateLogin(ctx context.Context, user *bridgev2.Use
 		flowID: flowID,
 	}
 	switch flowID {
+	case LoginFlowIDBotToken:
+		return &BotLogin{baseLogin: bl}, nil
 	case LoginFlowIDPhone:
 		return &PhoneLogin{baseLogin: bl}, nil
 	case LoginFlowIDQR:
@@ -205,6 +212,9 @@ func (bl *baseLogin) finalizeLogin(
 	client := ul.Client.(*TelegramClient)
 
 	go func() {
+		if metadata.IsBot {
+			return
+		}
 		log := ul.Log.With().Str("action", "post-login sync").Logger()
 		err := client.clientInitialized.Wait(ctx)
 		if err != nil {
@@ -215,6 +225,9 @@ func (bl *baseLogin) finalizeLogin(
 	}()
 
 	go func() {
+		if metadata.IsBot {
+			return
+		}
 		log := ul.Log.With().Str("component", "post-login takeout").Logger()
 		client.takeoutLock.Lock()
 		defer client.takeoutLock.Unlock()

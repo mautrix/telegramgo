@@ -55,11 +55,9 @@ func (t *TelegramClient) computeReactionsList(ctx context.Context, peer tg.PeerC
 	if len(reactionsList) < totalCount {
 		if user, ok := peer.(*tg.PeerUser); ok {
 			reactionsList = splitDMReactionCounts(msgReactions.Results, user.UserID, t.telegramUserID)
-
-			// TODO
-			// } else if t.isBot {
-			// 	// Can't fetch exact reaction senders as a bot
-			// 	return
+		} else if t.metadata.IsBot {
+			// Can't fetch exact reaction senders as a bot
+			return
 
 			// TODO remove redundant peer roundtrip, just add a peer -> input peer helper
 		} else if peer, _, err := t.inputPeerForPortalID(ctx, t.makePortalKeyFromPeer(peer, 0).ID); err != nil {
@@ -209,7 +207,7 @@ func (t *TelegramClient) getReactionLimit(ctx context.Context, sender networkid.
 
 func (t *TelegramClient) maybePollForReactions(ctx context.Context, portal *bridgev2.Portal) error {
 	// Only poll for reactions in supergroups
-	if portal == nil || !portal.Metadata.(*PortalMetadata).IsSuperGroup || portal.RoomType == database.RoomTypeSpace {
+	if t.metadata.IsBot || portal == nil || !portal.Metadata.(*PortalMetadata).IsSuperGroup || portal.RoomType == database.RoomTypeSpace {
 		return nil
 	}
 

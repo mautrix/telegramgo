@@ -105,7 +105,7 @@ func (t *TelegramClient) getDMChatInfo(ctx context.Context, userID int64) (*brid
 			MemberMap:   map[networkid.UserID]bridgev2.ChatMember{},
 			PowerLevels: t.getDMPowerLevels(ghost),
 		},
-		CanBackfill:  true,
+		CanBackfill:  !t.metadata.IsBot,
 		ExtraUpdates: updatePortalLastSyncAt,
 	}
 	chatInfo.Members.MemberMap.Add(bridgev2.ChatMember{EventSender: t.mySender()})
@@ -142,7 +142,7 @@ type memberFetchMeta struct {
 func (t *TelegramClient) wrapChatInfo(portalID networkid.PortalID, rawChat tg.ChatClass) (*bridgev2.ChatInfo, *memberFetchMeta, error) {
 	info := bridgev2.ChatInfo{
 		Type:        ptr.Ptr(database.RoomTypeDefault),
-		CanBackfill: true,
+		CanBackfill: !t.metadata.IsBot,
 		Members: &bridgev2.ChatMemberList{
 			ExcludeChangesFromTimeline: true,
 			MemberMap:                  bridgev2.ChatMemberMap{},

@@ -711,8 +711,7 @@ func (t *TelegramClient) FillBridgeState(state status.BridgeState) status.Bridge
 	if state.Info == nil {
 		state.Info = make(map[string]any)
 	}
-	meta := t.userLogin.Metadata.(*UserLoginMetadata)
-	state.Info["is_bot"] = meta.IsBot
-	state.Info["login_method"] = meta.LoginMethod
+	state.Info["is_bot"] = t.metadata.IsBot
+	state.Info["login_method"] = t.metadata.LoginMethod
 	return state
 }

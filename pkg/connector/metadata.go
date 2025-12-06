@@ -50,6 +50,7 @@ type GhostMetadata struct {
 
 type PortalMetadata struct {
 	IsSuperGroup      bool          `json:"is_supergroup,omitempty"`
+	IsForumGeneral    bool          `json:"is_forum_general,omitempty"`
 	ReadUpTo          int           `json:"read_up_to,omitempty"`
 	AllowedReactions  []string      `json:"allowed_reactions"`
 	LastSync          jsontime.Unix `json:"last_sync,omitempty"`
@@ -60,6 +61,12 @@ type PortalMetadata struct {
 func (pm *PortalMetadata) SetIsSuperGroup(isSupergroup bool) (changed bool) {
 	changed = pm.IsSuperGroup != isSupergroup
 	pm.IsSuperGroup = isSupergroup
+	return changed
+}
+
+func (pm *PortalMetadata) SetIsForumGeneral(isForumGeneral bool) (changed bool) {
+	changed = pm.IsForumGeneral != isForumGeneral
+	pm.IsForumGeneral = isForumGeneral
 	return changed
 }
 

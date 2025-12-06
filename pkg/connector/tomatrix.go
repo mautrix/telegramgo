@@ -143,7 +143,7 @@ func (c *TelegramClient) convertToMatrix(
 	}
 
 	var perMessageProfile *event.BeeperPerMessageProfile
-	if peerType, _, err := ids.ParsePortalID(portal.ID); err != nil {
+	if peerType, _, _, err := ids.ParsePortalID(portal.ID); err != nil {
 		return nil, fmt.Errorf("failed to parse portal ID: %w", err)
 	} else if peerType == ids.PeerTypeChannel && !portal.Metadata.(*PortalMetadata).IsSuperGroup {
 		var sender *networkid.UserID
@@ -210,11 +210,13 @@ func (c *TelegramClient) convertToMatrix(
 	if replyTo, ok := msg.GetReplyTo(); ok {
 		switch replyTo := replyTo.(type) {
 		case *tg.MessageReplyHeader:
-			cm.ReplyTo = &networkid.MessageOptionalPartID{}
-			if peerID, present := replyTo.GetReplyToPeerID(); present {
-				cm.ReplyTo.MessageID = ids.MakeMessageID(peerID, replyTo.ReplyToMsgID)
-			} else {
-				cm.ReplyTo.MessageID = ids.MakeMessageID(portal.PortalKey, replyTo.ReplyToMsgID)
+			if (replyTo.ReplyToTopID != 0 || !replyTo.ForumTopic) && replyTo.ReplyToTopID != replyTo.ReplyToMsgID {
+				cm.ReplyTo = &networkid.MessageOptionalPartID{}
+				if peerID, present := replyTo.GetReplyToPeerID(); present {
+					cm.ReplyTo.MessageID = ids.MakeMessageID(peerID, replyTo.ReplyToMsgID)
+				} else {
+					cm.ReplyTo.MessageID = ids.MakeMessageID(portal.PortalKey, replyTo.ReplyToMsgID)
+				}
 			}
 		default:
 			log.Warn().Type("reply_to", replyTo).Msg("unhandled reply to type")
@@ -529,7 +531,7 @@ func (c *TelegramClient) convertMediaRequiringUpload(
 		if err != nil {
 			if tgerr.Is(err, tg.ErrFileReferenceExpired) && allowRefetch {
 				log.Warn().Err(err).Msg("Failed to transfer media, trying to refetch from message")
-				peerType, peerID, err := ids.ParsePortalID(portal.ID)
+				peerType, peerID, _, err := ids.ParsePortalID(portal.ID)
 				if err != nil {
 					log.Err(err).Msg("Failed to parse portal ID to refetch media")
 				} else if msgMedia, err = c.refetchMedia(ctx, peerType, peerID, msgID); err != nil {

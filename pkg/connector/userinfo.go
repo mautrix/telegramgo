@@ -56,7 +56,7 @@ func (t *TelegramClient) wrapChannelGhostInfo(ctx context.Context, channel *tg.C
 
 	var identifiers []string
 	if username, set := channel.GetUsername(); set {
-		err = t.ScopedStore.SetUsername(ctx, ids.PeerTypeChannel, channel.ID, username)
+		err = t.main.Store.Username.Set(ctx, ids.PeerTypeChannel, channel.ID, username)
 		if err != nil {
 			return nil, err
 		}
@@ -88,7 +88,7 @@ func (t *TelegramClient) wrapUserInfo(ctx context.Context, u tg.UserClass) (*bri
 			}
 		}
 
-		if err := t.ScopedStore.SetUsername(ctx, ids.PeerTypeUser, user.ID, user.Username); err != nil {
+		if err := t.main.Store.Username.Set(ctx, ids.PeerTypeUser, user.ID, user.Username); err != nil {
 			return nil, err
 		}
 
@@ -101,7 +101,7 @@ func (t *TelegramClient) wrapUserInfo(ctx context.Context, u tg.UserClass) (*bri
 		if phone, ok := user.GetPhone(); ok {
 			normalized := strings.TrimPrefix(phone, "+")
 			identifiers = append(identifiers, fmt.Sprintf("tel:+%s", normalized))
-			if err := t.ScopedStore.SetPhoneNumber(ctx, user.ID, normalized); err != nil {
+			if err := t.main.Store.PhoneNumber.Set(ctx, user.ID, normalized); err != nil {
 				return nil, err
 			}
 		}

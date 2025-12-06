@@ -40,6 +40,7 @@ var (
 	modPowerLevel        = ptr.Ptr(50)
 	superadminPowerLevel = ptr.Ptr(75)
 	creatorPowerLevel    = ptr.Ptr(95)
+	nobodyPowerLevel     = ptr.Ptr(99)
 
 	otherPowerLevel          = ptr.Ptr(40)
 	anonymousPowerLevel      = ptr.Ptr(41)
@@ -135,9 +136,10 @@ type memberFetchMeta struct {
 	Input              *tg.InputChannel
 	IsBroadcast        bool
 	ParticipantsHidden bool
+	IsForum            bool
 }
 
-func (t *TelegramClient) wrapChatInfo(rawChat tg.ChatClass) (*bridgev2.ChatInfo, *memberFetchMeta, error) {
+func (t *TelegramClient) wrapChatInfo(portalID networkid.PortalID, rawChat tg.ChatClass) (*bridgev2.ChatInfo, *memberFetchMeta, error) {
 	info := bridgev2.ChatInfo{
 		Type:        ptr.Ptr(database.RoomTypeDefault),
 		CanBackfill: true,
@@ -147,8 +149,8 @@ func (t *TelegramClient) wrapChatInfo(rawChat tg.ChatClass) (*bridgev2.ChatInfo,
 		},
 		ExcludeChangesFromTimeline: true,
 	}
-	var isMegagroup, isBroadcast, left bool
-	var channelInput *tg.InputChannel
+	var mfm memberFetchMeta
+	var isMegagroup, isForumGeneral, left bool
 	var avatarErr error
 	switch chat := rawChat.(type) {
 	case *tg.Chat:
@@ -158,13 +160,28 @@ func (t *TelegramClient) wrapChatInfo(rawChat tg.ChatClass) (*bridgev2.ChatInfo,
 		info.Members.PowerLevels = t.getPowerLevelOverridesFromBannedRights(chat, chat.DefaultBannedRights)
 		left = chat.Left
 	case *tg.Channel:
-		channelInput = chat.AsInput()
+		mfm.Input = chat.AsInput()
+		mfm.IsBroadcast = chat.Broadcast
 		info.Name = &chat.Title
 		info.Members.TotalMemberCount = chat.ParticipantsCount
 		isMegagroup = chat.Megagroup
-		isBroadcast = chat.Broadcast
 		info.Avatar, avatarErr = t.convertChatPhoto(chat.AsInputPeer(), chat.Photo)
 		info.Members.PowerLevels = t.getPowerLevelOverridesFromBannedRights(chat, chat.DefaultBannedRights)
+		_, _, topicID, _ := ids.ParsePortalID(portalID)
+		if chat.Forum {
+			if topicID == ids.TopicIDSpaceRoom {
+				info.Type = ptr.Ptr(database.RoomTypeSpace)
+			} else if topicID == 0 {
+				isForumGeneral = true
+				info.Name = ptr.Ptr("#General - " + *info.Name)
+			}
+			if topicID != ids.TopicIDSpaceRoom {
+				info.ParentID = ptr.Ptr(ids.MakeForumParentPortalID(chat.ID))
+			}
+			mfm.IsForum = true
+		} else if topicID != 0 {
+			return nil, nil, fmt.Errorf("channel %d is not a forum, cannot have topics", chat.GetID())
+		}
 		left = chat.Left
 		if chat.Broadcast {
 			info.Members.MemberMap.Set(bridgev2.ChatMember{
@@ -188,13 +205,21 @@ func (t *TelegramClient) wrapChatInfo(rawChat tg.ChatClass) (*bridgev2.ChatInfo,
 		meta := portal.Metadata.(*PortalMetadata)
 		_ = updatePortalLastSyncAt(ctx, portal)
 		changed := meta.SetIsSuperGroup(isMegagroup)
+		changed = meta.SetIsForumGeneral(isForumGeneral) || changed
 		if info.Members.TotalMemberCount != 0 && meta.ParticipantsCount != info.Members.TotalMemberCount {
 			meta.ParticipantsCount = info.Members.TotalMemberCount
 			changed = true
 		}
 		return changed
 	}
-	return &info, &memberFetchMeta{Input: channelInput, IsBroadcast: isBroadcast}, nil
+	return &info, &mfm, nil
+}
+
+func (t *TelegramClient) overrideChatInfoWithTopic(info *bridgev2.ChatInfo, topic *tg.ForumTopic) {
+	info.Name = ptr.Ptr(topic.Title + " - " + *info.Name)
+	if topic.Closed {
+		info.Members.PowerLevels.EventsDefault = nobodyPowerLevel
+	}
 }
 
 func (t *TelegramClient) getChannelParticipants(ctx context.Context, req *tg.ChannelsGetParticipantsRequest) (*tg.ChannelsChannelParticipants, error) {
@@ -271,7 +296,7 @@ func (t *TelegramClient) fillUserLocalMeta(info *bridgev2.ChatInfo, dialog *tg.D
 	}
 }
 
-func (t *TelegramClient) wrapFullChatInfo(fullChat *tg.MessagesChatFull) (*bridgev2.ChatInfo, *memberFetchMeta, error) {
+func (t *TelegramClient) wrapFullChatInfo(portalID networkid.PortalID, fullChat *tg.MessagesChatFull) (*bridgev2.ChatInfo, *memberFetchMeta, error) {
 	var chat tg.ChatClass
 	for _, c := range fullChat.GetChats() {
 		if c.GetID() == fullChat.FullChat.GetID() {
@@ -283,7 +308,7 @@ func (t *TelegramClient) wrapFullChatInfo(fullChat *tg.MessagesChatFull) (*bridg
 		return nil, nil, fmt.Errorf("chat ID %d not found in full chat", fullChat.FullChat.GetID())
 	}
 
-	info, mfm, err := t.wrapChatInfo(chat)
+	info, mfm, err := t.wrapChatInfo(portalID, chat)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -437,7 +462,7 @@ func (t *TelegramClient) filterChannelParticipants(participants []tg.ChannelPart
 }
 
 func (t *TelegramClient) GetChatInfo(ctx context.Context, portal *bridgev2.Portal) (*bridgev2.ChatInfo, error) {
-	peerType, id, err := ids.ParsePortalID(portal.ID)
+	peerType, id, topicID, err := ids.ParsePortalID(portal.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -452,21 +477,41 @@ func (t *TelegramClient) GetChatInfo(ctx context.Context, portal *bridgev2.Porta
 		if err != nil {
 			return nil, err
 		}
-		info, _, err := t.wrapFullChatInfo(fullChat)
+		info, _, err := t.wrapFullChatInfo(portal.ID, fullChat)
 		return info, err
 	case ids.PeerTypeChannel:
 		accessHash, err := t.ScopedStore.GetAccessHash(ctx, ids.PeerTypeChannel, id)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get channel access hash: %w", err)
 		}
-		inputChannel := &tg.InputChannel{ChannelID: id, AccessHash: accessHash}
+		if topicID > 0 {
+			resp, err := APICallWithUpdates(ctx, t, func() (*tg.MessagesForumTopics, error) {
+				return t.client.API().MessagesGetForumTopicsByID(ctx, &tg.MessagesGetForumTopicsByIDRequest{
+					Peer:   &tg.InputPeerChannel{ChannelID: id, AccessHash: accessHash},
+					Topics: []int{topicID},
+				})
+			})
+			if err != nil {
+				return nil, err
+			}
+			channel, topic, err := getTopicInfoFromResponse(resp, id, topicID)
+			if err != nil {
+				return nil, err
+			}
+			info, _, err := t.wrapChatInfo(portal.ID, channel)
+			if err != nil {
+				return nil, err
+			}
+			t.overrideChatInfoWithTopic(info, topic)
+			return info, nil
+		}
 		fullChat, err := APICallWithUpdates(ctx, t, func() (*tg.MessagesChatFull, error) {
-			return t.client.API().ChannelsGetFullChannel(ctx, inputChannel)
+			return t.client.API().ChannelsGetFullChannel(ctx, &tg.InputChannel{ChannelID: id, AccessHash: accessHash})
 		})
 		if err != nil {
 			return nil, err
 		}
-		info, mfm, err := t.wrapFullChatInfo(fullChat)
+		info, mfm, err := t.wrapFullChatInfo(portal.ID, fullChat)
 		if err != nil {
 			return nil, err
 		}
@@ -478,6 +523,35 @@ func (t *TelegramClient) GetChatInfo(ctx context.Context, portal *bridgev2.Porta
 	default:
 		return nil, fmt.Errorf("unsupported peer type %s", peerType)
 	}
+}
+
+func getTopicInfoFromResponse(resp *tg.MessagesForumTopics, channelID int64, topicID int) (channel *tg.Channel, topic *tg.ForumTopic, err error) {
+	var ok bool
+	for _, ch := range resp.GetChats() {
+		if ch.GetID() == channelID {
+			channel, ok = ch.(*tg.Channel)
+			if !ok {
+				return nil, nil, fmt.Errorf("chat ID %d is %T not *tg.Channel", channelID, ch)
+			}
+			break
+		}
+	}
+	if channel == nil {
+		return nil, nil, fmt.Errorf("channel ID %d not found in chats", channelID)
+	}
+	for _, tp := range resp.GetTopics() {
+		if tp.GetID() == topicID {
+			topic, ok = tp.(*tg.ForumTopic)
+			if !ok {
+				return nil, nil, fmt.Errorf("topic ID %d is %T not *tg.ForumTopic", topicID, tp)
+			}
+			break
+		}
+	}
+	if topic == nil {
+		return nil, nil, fmt.Errorf("topic ID %d not found in topics", topicID)
+	}
+	return
 }
 
 func (t *TelegramClient) getDMPowerLevels(ghost *bridgev2.Ghost) *bridgev2.PowerLevelOverrides {

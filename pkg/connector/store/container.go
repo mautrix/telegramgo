@@ -20,6 +20,7 @@ import (
 	"context"
 
 	"go.mau.fi/util/dbutil"
+	"go.mau.fi/util/exsync"
 
 	"go.mau.fi/mautrix-telegram/pkg/connector/store/upgrades"
 )
@@ -28,6 +29,9 @@ type Container struct {
 	*dbutil.Database
 
 	TelegramFile *TelegramFileQuery
+	Username     *UsernameQuery
+	PhoneNumber  *PhoneNumberQuery
+	Topic        *TopicQuery
 }
 
 func NewStore(db *dbutil.Database, log dbutil.DatabaseLogger) *Container {
@@ -35,6 +39,9 @@ func NewStore(db *dbutil.Database, log dbutil.DatabaseLogger) *Container {
 		Database: db.Child("telegram_version", upgrades.Table, log),
 
 		TelegramFile: &TelegramFileQuery{dbutil.MakeQueryHelper(db, newTelegramFile)},
+		Username:     &UsernameQuery{db},
+		PhoneNumber:  &PhoneNumberQuery{db},
+		Topic:        &TopicQuery{db: db, existingTopics: exsync.NewSet[topicKey]()},
 	}
 }
 

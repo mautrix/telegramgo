@@ -21,7 +21,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
 
 	"go.mau.fi/util/dbutil"
 
@@ -71,27 +70,6 @@ const (
 		ON CONFLICT (user_id, entity_type, entity_id) DO UPDATE SET access_hash=excluded.access_hash
 	`
 	deleteAccessHashesForUserQuery = "DELETE FROM telegram_access_hash WHERE user_id=$1"
-
-	// User Username Queries
-	getUsernameQuery = "SELECT username FROM telegram_username WHERE entity_type=$1 AND entity_id=$2"
-	setUsernameQuery = `
-		INSERT INTO telegram_username (username, entity_type, entity_id)
-		VALUES ($1, $2, $3)
-		ON CONFLICT (username) DO UPDATE SET
-			entity_type=excluded.entity_type,
-			entity_id=excluded.entity_id
-	`
-	getByUsernameQuery = "SELECT entity_type, entity_id FROM telegram_username WHERE LOWER(username)=$1"
-	clearUsernameQuery = `DELETE FROM telegram_username WHERE entity_type=$1 AND entity_id=$2`
-
-	// User Phone Number Queries
-	getEntityIDForPhoneNumber = "SELECT entity_id FROM telegram_phone_number WHERE phone_number=$1"
-	setPhoneNumberQuery       = `
-		INSERT INTO telegram_phone_number (phone_number, entity_id)
-		VALUES ($1, $2)
-		ON CONFLICT (phone_number) DO UPDATE SET entity_id=excluded.entity_id
-	`
-	clearPhoneNumberQuery = "DELETE FROM telegram_phone_number WHERE entity_id=$1"
 )
 
 var _ updates.StateStorage = (*ScopedStore)(nil)
@@ -239,48 +217,6 @@ func (s *ScopedStore) SetAccessHash(ctx context.Context, entityType ids.PeerType
 
 func (s *ScopedStore) DeleteAccessHashesForUser(ctx context.Context) (err error) {
 	_, err = s.db.Exec(ctx, deleteAccessHashesForUserQuery, s.telegramUserID)
-	return
-}
-
-func (s *ScopedStore) GetUsername(ctx context.Context, entityType ids.PeerType, userID int64) (username string, err error) {
-	err = s.db.QueryRow(ctx, getUsernameQuery, entityType, userID).Scan(&username)
-	if errors.Is(err, sql.ErrNoRows) {
-		err = nil
-	}
-	return
-}
-
-func (s *ScopedStore) SetUsername(ctx context.Context, entityType ids.PeerType, entityID int64, username string) (err error) {
-	if username == "" {
-		_, err = s.db.Exec(ctx, clearUsernameQuery, entityType, entityID)
-	} else {
-		_, err = s.db.Exec(ctx, setUsernameQuery, username, entityType, entityID)
-	}
-	return
-}
-
-func (s *ScopedStore) GetEntityIDByUsername(ctx context.Context, username string) (entityType ids.PeerType, entityID int64, err error) {
-	err = s.db.QueryRow(ctx, getByUsernameQuery, strings.ToLower(username)).Scan(&entityType, &entityID)
-	if errors.Is(err, sql.ErrNoRows) {
-		err = nil
-	}
-	return
-}
-
-func (s *ScopedStore) GetUserIDByPhoneNumber(ctx context.Context, phoneNumber string) (userID int64, err error) {
-	err = s.db.QueryRow(ctx, getEntityIDForPhoneNumber, phoneNumber).Scan(&userID)
-	if errors.Is(err, sql.ErrNoRows) {
-		err = nil
-	}
-	return
-}
-
-func (s *ScopedStore) SetPhoneNumber(ctx context.Context, userID int64, phoneNumber string) (err error) {
-	if phoneNumber == "" {
-		_, err = s.db.Exec(ctx, clearPhoneNumberQuery, userID)
-	} else {
-		_, err = s.db.Exec(ctx, setPhoneNumberQuery, phoneNumber, userID)
-	}
 	return
 }
 

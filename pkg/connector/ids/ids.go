@@ -81,7 +81,7 @@ func MakeMessageID(rawChatID any, messageID int) networkid.MessageID {
 	var channelID int64
 	switch typedChatID := rawChatID.(type) {
 	case networkid.PortalKey:
-		peerType, entityID, _ := ParsePortalID(typedChatID.ID)
+		peerType, entityID, _, _ := ParsePortalID(typedChatID.ID)
 		if peerType == PeerTypeChannel {
 			channelID = entityID
 		}
@@ -163,52 +163,52 @@ func (pt PeerType) AsByte() byte {
 	}
 }
 
-func (pt PeerType) InternalAsPortalKey(chatID int64, receiver networkid.UserLoginID) networkid.PortalKey {
+func MakePortalID(pt PeerType, chatID int64) networkid.PortalID {
+	return networkid.PortalID(fmt.Sprintf("%s:%d", pt, chatID))
+}
+
+const TopicIDSpaceRoom = -1
+
+func MakeForumParentPortalID(channelID int64) networkid.PortalID {
+	return MakeTopicPortalID(channelID, TopicIDSpaceRoom)
+}
+
+func MakeTopicPortalID(channelID int64, topicID int) networkid.PortalID {
+	return networkid.PortalID(fmt.Sprintf("%s:%d:%d", PeerTypeChannel, channelID, topicID))
+}
+
+func InternalMakePortalKey(pt PeerType, chatID int64, topicID int, receiver networkid.UserLoginID) networkid.PortalKey {
 	portalKey := networkid.PortalKey{
-		ID: networkid.PortalID(fmt.Sprintf("%s:%d", pt, chatID)),
+		ID: MakePortalID(pt, chatID),
 	}
 	if pt == PeerTypeUser || pt == PeerTypeChat {
 		portalKey.Receiver = receiver
+	} else if topicID != 0 {
+		portalKey.ID = MakeTopicPortalID(chatID, topicID)
 	}
 	return portalKey
 }
 
-func GetChatID(peer tg.PeerClass) int64 {
+func InternalPeerToPortalKey(peer tg.PeerClass, topicID int, receiver networkid.UserLoginID) networkid.PortalKey {
 	switch v := peer.(type) {
 	case *tg.PeerUser:
-		return v.UserID
+		return InternalMakePortalKey(PeerTypeUser, v.UserID, topicID, receiver)
 	case *tg.PeerChat:
-		return v.ChatID
+		return InternalMakePortalKey(PeerTypeChat, v.ChatID, topicID, receiver)
 	case *tg.PeerChannel:
-		return v.ChannelID
+		return InternalMakePortalKey(PeerTypeChannel, v.ChannelID, topicID, receiver)
 	default:
 		panic(fmt.Errorf("unknown peer class type %T", v))
 	}
 }
 
-func InternalMakePortalKey(peer tg.PeerClass, receiver networkid.UserLoginID) networkid.PortalKey {
-	switch v := peer.(type) {
-	case *tg.PeerUser:
-		return networkid.PortalKey{
-			ID:       networkid.PortalID(fmt.Sprintf("%s:%d", PeerTypeUser, v.UserID)),
-			Receiver: receiver,
-		}
-	case *tg.PeerChat:
-		return networkid.PortalKey{
-			ID:       networkid.PortalID(fmt.Sprintf("%s:%d", PeerTypeChat, v.ChatID)),
-			Receiver: receiver,
-		}
-	case *tg.PeerChannel:
-		return networkid.PortalKey{ID: networkid.PortalID(fmt.Sprintf("%s:%d", PeerTypeChannel, v.ChannelID))}
-	default:
-		panic(fmt.Errorf("unknown peer class type %T", v))
-	}
-}
-
-func ParsePortalID(portalID networkid.PortalID) (pt PeerType, id int64, err error) {
+func ParsePortalID(portalID networkid.PortalID) (pt PeerType, id int64, topicID int, err error) {
 	parts := strings.Split(string(portalID), ":")
 	pt = PeerType(parts[0])
 	id, err = strconv.ParseInt(parts[1], 10, 64)
+	if len(parts) == 3 && err == nil && pt == PeerTypeChannel {
+		topicID, err = strconv.Atoi(parts[2])
+	}
 	return
 }
 

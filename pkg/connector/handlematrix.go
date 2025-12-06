@@ -94,8 +94,10 @@ func (t *TelegramClient) HandleMatrixViewingChat(ctx context.Context, msg *bridg
 	if msg.Portal == nil {
 		return nil
 	}
+	_, _, topicID, _ := ids.ParsePortalID(msg.Portal.PortalKey.ID)
+	// TODO sync topic parent space
 	meta := msg.Portal.Metadata.(*PortalMetadata)
-	if !meta.FullSynced || meta.LastSync.Add(24*time.Hour).Before(time.Now()) {
+	if (topicID == 0 && !meta.FullSynced) || meta.LastSync.Add(24*time.Hour).Before(time.Now()) {
 		t.userLogin.QueueRemoteEvent(&simplevent.ChatResync{
 			EventMeta: simplevent.EventMeta{
 				Type:      bridgev2.RemoteEventChatResync,
@@ -255,17 +257,23 @@ func parseRandomID(txnID networkid.RawTransactionID) int64 {
 }
 
 func (t *TelegramClient) HandleMatrixMessage(ctx context.Context, msg *bridgev2.MatrixMessage) (resp *bridgev2.MatrixMessageResponse, err error) {
+	if msg.Portal.RoomType == database.RoomTypeSpace {
+		return nil, fmt.Errorf("can't send messages to space portals")
+	}
 	// Handle Matrix events only after initial connection has been established to avoid deadlocking gotd
 	err = t.clientInitialized.Wait(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	peer, err := t.inputPeerForPortalID(ctx, msg.Portal.ID)
+	peer, topicID, err := t.inputPeerForPortalID(ctx, msg.Portal.ID)
 	if err != nil {
 		return nil, err
 	}
-	log := zerolog.Ctx(ctx).With().Stringer("portal_key", msg.Portal.PortalKey).Any("peer_id", peer).Logger()
+	log := zerolog.Ctx(ctx).With().
+		Stringer("portal_key", msg.Portal.PortalKey).
+		Any("peer_id", peer).
+		Logger()
 	ctx = log.WithContext(ctx)
 
 	var contentURI id.ContentURIString
@@ -282,6 +290,13 @@ func (t *TelegramClient) HandleMatrixMessage(ctx context.Context, msg *bridgev2.
 			return nil, err
 		}
 		replyTo = &tg.InputReplyToMessage{ReplyToMsgID: messageID}
+	}
+	if topicID > 0 {
+		if replyTo == nil {
+			replyTo = &tg.InputReplyToMessage{ReplyToMsgID: topicID}
+		} else {
+			replyTo.(*tg.InputReplyToMessage).TopMsgID = topicID
+		}
 	}
 
 	randomID := parseRandomID(msg.InputTransactionID)
@@ -396,8 +411,6 @@ func (t *TelegramClient) HandleMatrixMessage(ctx context.Context, msg *bridgev2.
 	resp = &bridgev2.MatrixMessageResponse{
 		DB: &database.Message{
 			ID:        messageID,
-			MXID:      msg.Event.ID,
-			Room:      msg.Portal.PortalKey,
 			SenderID:  t.userID,
 			Timestamp: timestamp,
 			Metadata: &MessageMetadata{
@@ -411,12 +424,15 @@ func (t *TelegramClient) HandleMatrixMessage(ctx context.Context, msg *bridgev2.
 }
 
 func (t *TelegramClient) HandleMatrixEdit(ctx context.Context, msg *bridgev2.MatrixEdit) error {
+	if msg.Portal.RoomType == database.RoomTypeSpace {
+		return fmt.Errorf("can't send messages to space portals")
+	}
 	log := zerolog.Ctx(ctx).With().
 		Str("conversion_direction", "to_telegram").
 		Str("handler", "matrix_edit").
 		Logger()
 
-	peer, err := t.inputPeerForPortalID(ctx, msg.Portal.ID)
+	peer, _, err := t.inputPeerForPortalID(ctx, msg.Portal.ID)
 	if err != nil {
 		return err
 	}
@@ -483,11 +499,13 @@ func (t *TelegramClient) HandleMatrixEdit(ctx context.Context, msg *bridgev2.Mat
 }
 
 func (t *TelegramClient) HandleMatrixMessageRemove(ctx context.Context, msg *bridgev2.MatrixMessageRemove) error {
-	if dbMsg, err := t.main.Bridge.DB.Message.GetPartByMXID(ctx, msg.TargetMessage.MXID); err != nil {
+	if msg.Portal.RoomType == database.RoomTypeSpace {
+		return fmt.Errorf("can't send messages to space portals")
+	} else if dbMsg, err := t.main.Bridge.DB.Message.GetPartByMXID(ctx, msg.TargetMessage.MXID); err != nil {
 		return err
 	} else if _, messageID, err := ids.ParseMessageID(dbMsg.ID); err != nil {
 		return err
-	} else if peer, err := t.inputPeerForPortalID(ctx, msg.Portal.ID); err != nil {
+	} else if peer, _, err := t.inputPeerForPortalID(ctx, msg.Portal.ID); err != nil {
 		return err
 	} else {
 		_, err := message.NewSender(t.client.API()).
@@ -499,6 +517,9 @@ func (t *TelegramClient) HandleMatrixMessageRemove(ctx context.Context, msg *bri
 }
 
 func (t *TelegramClient) PreHandleMatrixReaction(ctx context.Context, msg *bridgev2.MatrixReaction) (bridgev2.MatrixReactionPreResponse, error) {
+	if msg.Portal.RoomType == database.RoomTypeSpace {
+		return bridgev2.MatrixReactionPreResponse{}, fmt.Errorf("can't send messages to space portals")
+	}
 	log := zerolog.Ctx(ctx).With().
 		Str("conversion_direction", "to_telegram").
 		Str("handler", "pre_handle_matrix_reaction").
@@ -562,7 +583,7 @@ func (t *TelegramClient) appendEmojiID(reactionList []tg.ReactionClass, emojiID 
 }
 
 func (t *TelegramClient) HandleMatrixReaction(ctx context.Context, msg *bridgev2.MatrixReaction) (reaction *database.Reaction, err error) {
-	peer, err := t.inputPeerForPortalID(ctx, msg.Portal.ID)
+	peer, _, err := t.inputPeerForPortalID(ctx, msg.Portal.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -599,7 +620,10 @@ func (t *TelegramClient) HandleMatrixReaction(ctx context.Context, msg *bridgev2
 }
 
 func (t *TelegramClient) HandleMatrixReactionRemove(ctx context.Context, msg *bridgev2.MatrixReactionRemove) error {
-	peer, err := t.inputPeerForPortalID(ctx, msg.Portal.ID)
+	if msg.Portal.RoomType == database.RoomTypeSpace {
+		return fmt.Errorf("can't send messages to space portals")
+	}
+	peer, _, err := t.inputPeerForPortalID(ctx, msg.Portal.ID)
 	if err != nil {
 		return err
 	}
@@ -637,16 +661,22 @@ func (t *TelegramClient) HandleMatrixReactionRemove(ctx context.Context, msg *br
 }
 
 func (t *TelegramClient) HandleMatrixReadReceipt(ctx context.Context, msg *bridgev2.MatrixReadReceipt) error {
+	if msg.Portal.RoomType == database.RoomTypeSpace {
+		return nil
+	}
 	log := zerolog.Ctx(ctx).With().
 		Str("action", "handle_matrix_read_receipt").
 		Str("portal_id", string(msg.Portal.ID)).
 		Bool("is_supergroup", msg.Portal.Metadata.(*PortalMetadata).IsSuperGroup).
 		Logger()
-	peerType, portalID, parseErr := ids.ParsePortalID(msg.Portal.ID)
+	peerType, portalID, topicID, parseErr := ids.ParsePortalID(msg.Portal.ID)
 	if parseErr != nil {
 		return parseErr
 	}
-	inputPeer, parseErr := t.inputPeerForPortalID(ctx, msg.Portal.ID)
+	if msg.Portal.Metadata.(*PortalMetadata).IsForumGeneral {
+		topicID = 1
+	}
+	inputPeer, _, parseErr := t.inputPeerForPortalID(ctx, msg.Portal.ID)
 	if parseErr != nil {
 		return parseErr
 	}
@@ -659,7 +689,8 @@ func (t *TelegramClient) HandleMatrixReadReceipt(ctx context.Context, msg *bridg
 	go func() {
 		defer wg.Done()
 		_, readMentionsErr = t.client.API().MessagesReadMentions(ctx, &tg.MessagesReadMentionsRequest{
-			Peer: inputPeer,
+			Peer:     inputPeer,
+			TopMsgID: topicID,
 		})
 	}()
 
@@ -668,7 +699,8 @@ func (t *TelegramClient) HandleMatrixReadReceipt(ctx context.Context, msg *bridg
 	go func() {
 		defer wg.Done()
 		_, readMentionsErr = t.client.API().MessagesReadReactions(ctx, &tg.MessagesReadReactionsRequest{
-			Peer: inputPeer,
+			Peer:     inputPeer,
+			TopMsgID: topicID,
 		})
 	}()
 
@@ -707,6 +739,7 @@ func (t *TelegramClient) HandleMatrixReadReceipt(ctx context.Context, msg *bridg
 			}
 			_, readMessagesErr = t.client.API().ChannelsReadHistory(ctx, &tg.ChannelsReadHistoryRequest{
 				Channel: &tg.InputChannel{ChannelID: portalID, AccessHash: accessHash},
+				MaxID:   maxID,
 			})
 
 			if !msg.Portal.Metadata.(*PortalMetadata).IsSuperGroup {
@@ -741,21 +774,43 @@ func (t *TelegramClient) HandleMatrixReadReceipt(ctx context.Context, msg *bridg
 }
 
 func (t *TelegramClient) HandleMatrixTyping(ctx context.Context, msg *bridgev2.MatrixTyping) error {
-	inputPeer, err := t.inputPeerForPortalID(ctx, msg.Portal.ID)
+	if msg.Portal.RoomType == database.RoomTypeSpace {
+		return nil
+	}
+	inputPeer, topicID, err := t.inputPeerForPortalID(ctx, msg.Portal.ID)
 	if err != nil {
 		return err
 	}
+	if msg.Portal.Metadata.(*PortalMetadata).IsForumGeneral {
+		topicID = 1
+	}
+	var action tg.SendMessageActionClass
+	switch msg.Type {
+	case bridgev2.TypingTypeText:
+		action = &tg.SendMessageTypingAction{}
+	case bridgev2.TypingTypeRecordingMedia:
+		// TODO media types?
+		action = &tg.SendMessageRecordVideoAction{}
+	case bridgev2.TypingTypeUploadingMedia:
+		action = &tg.SendMessageUploadVideoAction{}
+	}
+	if !msg.IsTyping {
+		action = &tg.SendMessageCancelAction{}
+	}
 	_, err = t.client.API().MessagesSetTyping(ctx, &tg.MessagesSetTypingRequest{
-		Peer:   inputPeer,
-		Action: &tg.SendMessageTypingAction{},
+		Peer:     inputPeer,
+		TopMsgID: topicID,
+		Action:   action,
 	})
 	return err
 }
 
 func (t *TelegramClient) HandleMatrixDisappearingTimer(ctx context.Context, msg *bridgev2.MatrixDisappearingTimer) (bool, error) {
-	inputPeer, err := t.inputPeerForPortalID(ctx, msg.Portal.ID)
+	inputPeer, topicID, err := t.inputPeerForPortalID(ctx, msg.Portal.ID)
 	if err != nil {
 		return false, err
+	} else if topicID > 0 {
+		return false, fmt.Errorf("topics can't have their own disappearing timer")
 	}
 	_, err = t.client.API().MessagesSetHistoryTTL(ctx, &tg.MessagesSetHistoryTTLRequest{
 		Peer:   inputPeer,
@@ -771,7 +826,7 @@ func (t *TelegramClient) HandleMatrixDisappearingTimer(ctx context.Context, msg 
 }
 
 func (t *TelegramClient) HandleMute(ctx context.Context, msg *bridgev2.MatrixMute) error {
-	inputPeer, err := t.inputPeerForPortalID(ctx, msg.Portal.ID)
+	inputPeer, topicID, err := t.inputPeerForPortalID(ctx, msg.Portal.ID)
 	if err != nil {
 		return err
 	}
@@ -780,18 +835,26 @@ func (t *TelegramClient) HandleMute(ctx context.Context, msg *bridgev2.MatrixMut
 		Silent:    msg.Content.IsMuted(),
 		MuteUntil: int(max(0, min(msg.Content.GetMutedUntilTime().Unix(), math.MaxInt32))),
 	}
+	var peer tg.InputNotifyPeerClass
+	if topicID > 0 {
+		peer = &tg.InputNotifyForumTopic{Peer: inputPeer, TopMsgID: topicID}
+	} else {
+		peer = &tg.InputNotifyPeer{Peer: inputPeer}
+	}
 
 	_, err = t.client.API().AccountUpdateNotifySettings(ctx, &tg.AccountUpdateNotifySettingsRequest{
-		Peer:     &tg.InputNotifyPeer{Peer: inputPeer},
+		Peer:     peer,
 		Settings: settings,
 	})
 	return err
 }
 
 func (t *TelegramClient) HandleRoomTag(ctx context.Context, msg *bridgev2.MatrixRoomTag) error {
-	inputPeer, err := t.inputPeerForPortalID(ctx, msg.Portal.ID)
+	inputPeer, topicID, err := t.inputPeerForPortalID(ctx, msg.Portal.ID)
 	if err != nil {
 		return err
+	} else if topicID > 0 {
+		return fmt.Errorf("topics can't be pinned for yourself")
 	}
 
 	_, err = t.client.API().MessagesToggleDialogPin(ctx, &tg.MessagesToggleDialogPinRequest{
@@ -802,7 +865,7 @@ func (t *TelegramClient) HandleRoomTag(ctx context.Context, msg *bridgev2.Matrix
 }
 
 func (t *TelegramClient) HandleMatrixDeleteChat(ctx context.Context, chat *bridgev2.MatrixDeleteChat) error {
-	peerType, id, err := ids.ParsePortalID(chat.Portal.ID)
+	peerType, id, topicID, err := ids.ParsePortalID(chat.Portal.ID)
 	if err != nil {
 		return err
 	}
@@ -839,12 +902,21 @@ func (t *TelegramClient) HandleMatrixDeleteChat(ctx context.Context, chat *bridg
 		if err != nil {
 			return err
 		}
-		channel := &tg.InputChannel{
-			ChannelID:  id,
-			AccessHash: accessHash,
-		}
 		if chat.Content.DeleteForEveryone {
-			_, err := t.client.API().ChannelsDeleteChannel(ctx, channel)
+			if topicID > 0 {
+				_, err = t.client.API().MessagesDeleteTopicHistory(ctx, &tg.MessagesDeleteTopicHistoryRequest{
+					Peer: &tg.InputPeerChannel{
+						ChannelID:  id,
+						AccessHash: accessHash,
+					},
+					TopMsgID: topicID,
+				})
+			} else {
+				_, err = t.client.API().ChannelsDeleteChannel(ctx, &tg.InputChannel{
+					ChannelID:  id,
+					AccessHash: accessHash,
+				})
+			}
 			if err != nil {
 				return err
 			}
@@ -859,7 +931,7 @@ func (t *TelegramClient) HandleMatrixDeleteChat(ctx context.Context, chat *bridg
 }
 
 func (t *TelegramClient) HandleMatrixRoomName(ctx context.Context, msg *bridgev2.MatrixRoomName) (bool, error) {
-	peerType, id, err := ids.ParsePortalID(msg.Portal.ID)
+	peerType, id, topicID, err := ids.ParsePortalID(msg.Portal.ID)
 	if err != nil {
 		return false, err
 	}
@@ -879,13 +951,24 @@ func (t *TelegramClient) HandleMatrixRoomName(ctx context.Context, msg *bridgev2
 		if err != nil {
 			return false, err
 		}
-		_, err = t.client.API().ChannelsEditTitle(ctx, &tg.ChannelsEditTitleRequest{
-			Channel: &tg.InputChannel{
-				ChannelID:  id,
-				AccessHash: accessHash,
-			},
-			Title: msg.Content.Name,
-		})
+		if topicID > 0 {
+			_, err = t.client.API().MessagesEditForumTopic(ctx, &tg.MessagesEditForumTopicRequest{
+				Peer: &tg.InputPeerChannel{
+					ChannelID:  id,
+					AccessHash: accessHash,
+				},
+				TopicID: topicID,
+				Title:   msg.Content.Name,
+			})
+		} else {
+			_, err = t.client.API().ChannelsEditTitle(ctx, &tg.ChannelsEditTitleRequest{
+				Channel: &tg.InputChannel{
+					ChannelID:  id,
+					AccessHash: accessHash,
+				},
+				Title: msg.Content.Name,
+			})
+		}
 		if err != nil {
 			return false, err
 		}
@@ -896,13 +979,15 @@ func (t *TelegramClient) HandleMatrixRoomName(ctx context.Context, msg *bridgev2
 }
 
 func (t *TelegramClient) HandleMatrixRoomAvatar(ctx context.Context, msg *bridgev2.MatrixRoomAvatar) (bool, error) {
-	peerType, id, err := ids.ParsePortalID(msg.Portal.ID)
+	peerType, id, topicID, err := ids.ParsePortalID(msg.Portal.ID)
 	if err != nil {
 		return false, err
 	}
 
 	if peerType == ids.PeerTypeUser {
 		return false, fmt.Errorf("changing user avatar is not supported")
+	} else if topicID > 0 {
+		return false, fmt.Errorf("changing group topic avatar is not supported")
 	}
 
 	var photo tg.InputChatPhotoClass

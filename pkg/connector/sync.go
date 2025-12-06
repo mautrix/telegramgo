@@ -69,7 +69,7 @@ func (t *TelegramClient) resetPinnedDialogs(ctx context.Context, dialogs []tg.Di
 	t.userLogin.Metadata.(*UserLoginMetadata).PinnedDialogs = nil
 	for _, dialog := range dialogs {
 		if dialog.GetPinned() {
-			portalKey := t.makePortalKeyFromPeer(dialog.GetPeer())
+			portalKey := t.makePortalKeyFromPeer(dialog.GetPeer(), 0)
 			t.userLogin.Metadata.(*UserLoginMetadata).PinnedDialogs = append(t.userLogin.Metadata.(*UserLoginMetadata).PinnedDialogs, portalKey.ID)
 		}
 	}
@@ -105,7 +105,7 @@ func (t *TelegramClient) handleDialogs(ctx context.Context, dialogs tg.ModifiedM
 			Logger()
 		log.Debug().Msg("Syncing dialog")
 
-		portalKey := t.makePortalKeyFromPeer(dialog.GetPeer())
+		portalKey := t.makePortalKeyFromPeer(dialog.GetPeer(), 0)
 		portal, err := t.main.Bridge.GetPortalByKey(ctx, portalKey)
 		if err != nil {
 			return err
@@ -168,7 +168,7 @@ func (t *TelegramClient) handleDialogs(ctx context.Context, dialogs tg.ModifiedM
 				continue
 			}
 			var mfm *memberFetchMeta
-			chatInfo, mfm, err = t.wrapChatInfo(channel)
+			chatInfo, mfm, err = t.wrapChatInfo(portal.ID, channel)
 			if err != nil {
 				return fmt.Errorf("failed to get chat info for %s: %w", portalKey, err)
 			}

@@ -23,6 +23,7 @@ import (
 
 	"github.com/rs/zerolog"
 	"maunium.net/go/mautrix/bridgev2"
+	"maunium.net/go/mautrix/bridgev2/database"
 	"maunium.net/go/mautrix/bridgev2/networkid"
 	"maunium.net/go/mautrix/bridgev2/simplevent"
 
@@ -60,10 +61,11 @@ func (t *TelegramClient) computeReactionsList(ctx context.Context, peer tg.PeerC
 			// 	// Can't fetch exact reaction senders as a bot
 			// 	return
 
-			// TODO should calls to this be limited?
-		} else if peer, err := t.inputPeerForPortalID(ctx, t.makePortalKeyFromPeer(peer).ID); err != nil {
+			// TODO remove redundant peer roundtrip, just add a peer -> input peer helper
+		} else if peer, _, err := t.inputPeerForPortalID(ctx, t.makePortalKeyFromPeer(peer, 0).ID); err != nil {
 			return nil, false, nil, fmt.Errorf("failed to get input peer: %w", err)
 		} else {
+			// TODO should calls to this be limited?
 			reactions, err := APICallWithUpdates(ctx, t, func() (*tg.MessagesMessageReactionsList, error) {
 				return t.client.API().MessagesGetMessageReactionsList(ctx, &tg.MessagesGetMessageReactionsListRequest{
 					Peer: peer, ID: msgID, Limit: 100,
@@ -152,7 +154,7 @@ func (t *TelegramClient) handleTelegramReactions(ctx context.Context, msg *tg.Me
 			LogContext: func(c zerolog.Context) zerolog.Context {
 				return c.Int("message_id", msg.ID)
 			},
-			PortalKey: t.makePortalKeyFromPeer(msg.PeerID),
+			PortalKey: t.makePortalKeyFromPeer(msg.PeerID, t.getTopicID(ctx, msg.PeerID, msg.ReplyTo)),
 		},
 		TargetMessage: ids.GetMessageIDFromMessage(msg),
 		Reactions:     &bridgev2.ReactionSyncData{Users: users, HasAllUsers: isFull},
@@ -207,7 +209,7 @@ func (t *TelegramClient) getReactionLimit(ctx context.Context, sender networkid.
 
 func (t *TelegramClient) maybePollForReactions(ctx context.Context, portal *bridgev2.Portal) error {
 	// Only poll for reactions in supergroups
-	if portal == nil || !portal.Metadata.(*PortalMetadata).IsSuperGroup {
+	if portal == nil || !portal.Metadata.(*PortalMetadata).IsSuperGroup || portal.RoomType == database.RoomTypeSpace {
 		return nil
 	}
 
@@ -225,7 +227,7 @@ func (t *TelegramClient) maybePollForReactions(ctx context.Context, portal *brid
 }
 
 func (t *TelegramClient) pollForReactions(ctx context.Context, portalKey networkid.PortalKey) error {
-	inputPeer, parseErr := t.inputPeerForPortalID(ctx, portalKey.ID)
+	inputPeer, _, parseErr := t.inputPeerForPortalID(ctx, portalKey.ID)
 	if parseErr != nil {
 		return parseErr
 	}

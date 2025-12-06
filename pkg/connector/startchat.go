@@ -53,7 +53,7 @@ func (t *TelegramClient) getResolveIdentifierResponseForUser(ctx context.Context
 			UserID:   networkUserID,
 			UserInfo: userInfo,
 			Chat: &bridgev2.CreateChatResponse{
-				PortalKey: t.makePortalKeyFromID(ids.PeerTypeUser, user.GetID()),
+				PortalKey: t.makePortalKeyFromID(ids.PeerTypeUser, user.GetID(), 0),
 			},
 		}, nil
 	}
@@ -70,7 +70,7 @@ func (t *TelegramClient) getResolveIdentifierResponseForUserID(ctx context.Conte
 	resp = &bridgev2.ResolveIdentifierResponse{
 		UserID: networkUserID,
 		Chat: &bridgev2.CreateChatResponse{
-			PortalKey: t.makePortalKeyFromID(ids.PeerTypeUser, userID),
+			PortalKey: t.makePortalKeyFromID(ids.PeerTypeUser, userID, 0),
 		},
 	}
 	resp.Ghost, err = t.main.Bridge.GetExistingGhostByID(ctx, networkUserID)
@@ -108,7 +108,7 @@ func (t *TelegramClient) ResolveIdentifier(ctx context.Context, identifier strin
 
 	if identifier[0] == '+' {
 		normalized := strings.TrimPrefix(identifier, "+")
-		if userID, err := t.ScopedStore.GetUserIDByPhoneNumber(ctx, normalized); err != nil {
+		if userID, err := t.main.Store.PhoneNumber.GetUserID(ctx, normalized); err != nil {
 			return nil, fmt.Errorf("failed to get user ID by phone number: %w", err)
 		} else if userID == 0 {
 			log.Info().Msg("Phone number not found in database")
@@ -121,7 +121,7 @@ func (t *TelegramClient) ResolveIdentifier(ctx context.Context, identifier strin
 		return t.getResolveIdentifierResponseForUserID(ctx, userID)
 	} else if match := usernameRe.FindStringSubmatch(identifier); match != nil && !strings.Contains(identifier, "__") {
 		// This is a username
-		entityType, userID, err := t.ScopedStore.GetEntityIDByUsername(ctx, match[1])
+		entityType, userID, err := t.main.Store.Username.GetEntityID(ctx, match[1])
 		if entityType == ids.PeerTypeUser && (err == nil || userID != 0) {
 			// We know this username.
 			resp, err := t.getResolveIdentifierResponseForUserID(ctx, userID)
@@ -273,7 +273,7 @@ func (t *TelegramClient) CreateGroup(ctx context.Context, params *bridgev2.Group
 	} else if chat, ok := chats[0].(*tg.Chat); !ok {
 		return nil, fmt.Errorf("unexpected chat type: %T", chats[0])
 	} else {
-		portalKey := t.makePortalKeyFromID(ids.PeerTypeChat, chat.ID)
+		portalKey := t.makePortalKeyFromID(ids.PeerTypeChat, chat.ID, 0)
 		if params.RoomID != "" {
 			portal, err := t.main.Bridge.GetPortalByKey(ctx, portalKey)
 			if err != nil {

@@ -437,7 +437,7 @@ func (t *ReadyTransferer) DownloadBytes(ctx context.Context) ([]byte, error) {
 
 // DirectDownloadURL returns the direct download URL for the media.
 func (t *ReadyTransferer) DirectDownloadURL(ctx context.Context, loggedInUserID int64, portal *bridgev2.Portal, msgID int, thumbnail bool, telegramMediaID int64) (id.ContentURIString, *event.FileInfo, error) {
-	peerType, chatID, err := ids.ParsePortalID(portal.ID)
+	peerType, chatID, _, err := ids.ParsePortalID(portal.ID)
 	if err != nil {
 		return "", nil, err
 	}

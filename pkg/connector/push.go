@@ -50,6 +50,7 @@ type PushCustomData struct {
 	MessageID int `json:"msg_id,string"`
 
 	ChannelID int64 `json:"channel_id,string"`
+	TopicID   int   `json:"top_msg_id,string"`
 	ChatID    int64 `json:"chat_id,string"`
 	FromID    int64 `json:"from_id,string"`
 
@@ -281,11 +282,11 @@ func (t *TelegramClient) ConnectBackground(ctx context.Context, params *bridgev2
 		}
 		var err error
 		if data.Custom.ChannelID != 0 {
-			relatedPortal, err = t.main.Bridge.GetPortalByKey(ctx, t.makePortalKeyFromID(ids.PeerTypeChannel, data.Custom.ChannelID))
+			relatedPortal, err = t.main.Bridge.GetPortalByKey(ctx, t.makePortalKeyFromID(ids.PeerTypeChannel, data.Custom.ChannelID, data.Custom.TopicID))
 		} else if data.Custom.ChatID != 0 {
-			relatedPortal, err = t.main.Bridge.GetPortalByKey(ctx, t.makePortalKeyFromID(ids.PeerTypeChat, data.Custom.ChatID))
+			relatedPortal, err = t.main.Bridge.GetPortalByKey(ctx, t.makePortalKeyFromID(ids.PeerTypeChat, data.Custom.ChatID, 0))
 		} else if data.Custom.FromID != 0 {
-			relatedPortal, err = t.main.Bridge.GetPortalByKey(ctx, t.makePortalKeyFromID(ids.PeerTypeUser, data.Custom.FromID))
+			relatedPortal, err = t.main.Bridge.GetPortalByKey(ctx, t.makePortalKeyFromID(ids.PeerTypeUser, data.Custom.FromID, 0))
 		}
 		if err != nil {
 			return fmt.Errorf("failed to get related portal: %w", err)

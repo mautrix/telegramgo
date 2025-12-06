@@ -109,7 +109,7 @@ func (tc *TelegramConnector) Download(ctx context.Context, mediaID networkid.Med
 			return nil, fmt.Errorf("failed to get user login: %w", err)
 		}
 
-		logins, err := tc.Bridge.GetUserLoginsInPortal(ctx, ids.PeerTypeChannel.InternalAsPortalKey(info.PeerID, ""))
+		logins, err := tc.Bridge.GetUserLoginsInPortal(ctx, ids.InternalMakePortalKey(ids.PeerTypeChannel, info.PeerID, 0, ""))
 		if err != nil {
 			return nil, err
 		} else if len(logins) == 0 {

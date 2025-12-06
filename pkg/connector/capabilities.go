@@ -229,8 +229,9 @@ func (t *TelegramClient) GetCapabilities(ctx context.Context, portal *bridgev2.P
 			Timers: telegramTimers,
 		},
 		State: event.StateFeatureMap{
-			event.StateRoomName.Type:   {Level: event.CapLevelFullySupported},
-			event.StateRoomAvatar.Type: {Level: event.CapLevelFullySupported},
+			event.StateRoomName.Type:                {Level: event.CapLevelFullySupported},
+			event.StateRoomAvatar.Type:              {Level: event.CapLevelFullySupported},
+			event.StateBeeperDisappearingTimer.Type: {Level: event.CapLevelFullySupported},
 		},
 	}
 	// TODO non-admins can only edit messages within 48 hours
@@ -258,17 +259,29 @@ func (t *TelegramClient) GetCapabilities(ctx context.Context, portal *bridgev2.P
 		feat.ReactionCount = 3
 	}
 	portalMetadata := portal.Metadata.(*PortalMetadata)
-	peerType, _, _ := ids.ParsePortalID(portal.ID)
+	peerType, _, topicID, _ := ids.ParsePortalID(portal.ID)
+	if topicID > 0 {
+		baseID += "+topic"
+		// TODO do topics have other changes?
+		delete(feat.State, event.StateRoomAvatar.Type)
+		delete(feat.State, event.StateBeeperDisappearingTimer.Type)
+		feat.DisappearingTimer = nil
+	} else if topicID == ids.TopicIDSpaceRoom {
+		baseID += "+spaceroom"
+		feat = &event.RoomFeatures{}
+	}
 
 	switch portal.RoomType {
 	case database.RoomTypeDM:
 		baseID += "+dm"
 		feat.DeleteChat = true
 		feat.DeleteChatForEveryone = true
-		feat.State = nil
+		feat.State = event.StateFeatureMap{
+			event.StateBeeperDisappearingTimer.Type: {Level: event.CapLevelFullySupported},
+		}
 	default:
 		// Group creators can delete the chat for everyone, unless it's a large channel
-		if peerType == ids.PeerTypeChat || portalMetadata.ParticipantsCount < 1000 {
+		if peerType == ids.PeerTypeChat || portalMetadata.ParticipantsCount < 1000 || topicID > 0 {
 			baseID += "+deletablegroup"
 			feat.DeleteChatForEveryone = true
 		}

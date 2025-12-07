@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 
+	"go.mau.fi/util/variationselector"
 	"maunium.net/go/mautrix/bridgev2/networkid"
 
 	"go.mau.fi/mautrix-telegram/pkg/gotd/tg"
@@ -221,7 +222,7 @@ func MakeEmojiIDFromDocumentID(documentID int64) networkid.EmojiID {
 }
 
 func MakeEmojiIDFromEmoticon(emoji string) networkid.EmojiID {
-	return networkid.EmojiID(emoji)
+	return networkid.EmojiID(variationselector.Remove(emoji))
 }
 
 func isNumbers(s string) bool {

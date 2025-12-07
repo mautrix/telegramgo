@@ -1002,6 +1002,9 @@ func (t *TelegramClient) inputPeerForPortalID(ctx context.Context, portalID netw
 }
 
 func (t *TelegramClient) getAppConfigCached(ctx context.Context) (map[string]any, error) {
+	if t.metadata.IsBot {
+		return nil, nil
+	}
 	t.appConfigLock.Lock()
 	defer t.appConfigLock.Unlock()
 	if t.appConfig == nil {

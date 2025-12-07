@@ -19,7 +19,10 @@ package emojis
 import (
 	_ "embed"
 	"encoding/json"
+	"fmt"
+	"sync"
 
+	"go.mau.fi/util/exstrings"
 	"maunium.net/go/mautrix/bridgev2/networkid"
 	"maunium.net/go/mautrix/id"
 
@@ -27,14 +30,15 @@ import (
 )
 
 //go:embed unicodemojipack.json
-var unicodemojiPackJSON []byte
+var unicodemojiPackJSON string
+var initOnce sync.Once
 
 var unicodemojiPack = map[string]int64{}
 var reverseUnicodemojiPack = map[int64]string{}
 
-func init() {
-	if err := json.Unmarshal(unicodemojiPackJSON, &unicodemojiPack); err != nil {
-		panic("Failed to unmarshal unicodemojipack")
+func doInit() {
+	if err := json.Unmarshal(exstrings.UnsafeBytes(unicodemojiPackJSON), &unicodemojiPack); err != nil {
+		panic(fmt.Errorf("Failed to unmarshal unicodemojipack: %w", err))
 	}
 
 	for k, v := range unicodemojiPack {
@@ -45,6 +49,7 @@ func init() {
 // ConvertKnownEmojis converts known document IDs from the unicode emoji pack
 // to the corresponding unicode string and returns the remaining IDs.
 func ConvertKnownEmojis(emojiIDs []int64) (result map[networkid.EmojiID]EmojiInfo, remaining []int64) {
+	initOnce.Do(doInit)
 	result = map[networkid.EmojiID]EmojiInfo{}
 	for _, e := range emojiIDs {
 		if v, ok := reverseUnicodemojiPack[e]; ok {
@@ -57,6 +62,7 @@ func ConvertKnownEmojis(emojiIDs []int64) (result map[networkid.EmojiID]EmojiInf
 }
 
 func GetEmojiDocumentID(emoji string) (int64, bool) {
+	initOnce.Do(doInit)
 	id, ok := unicodemojiPack[emoji]
 	return id, ok
 }

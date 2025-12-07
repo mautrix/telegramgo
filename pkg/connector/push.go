@@ -402,7 +402,7 @@ UserLoop:
 }
 
 func (t *TelegramClient) RegisterPushNotifications(ctx context.Context, pushType bridgev2.PushType, token string) error {
-	meta := t.userLogin.Metadata.(*UserLoginMetadata)
+	meta := t.metadata
 	if meta.PushEncryptionKey == nil {
 		meta.PushEncryptionKey = random.Bytes(256)
 		err := t.userLogin.Save(ctx)

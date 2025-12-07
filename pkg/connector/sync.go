@@ -66,11 +66,11 @@ func (t *TelegramClient) SyncChats(ctx context.Context) error {
 }
 
 func (t *TelegramClient) resetPinnedDialogs(ctx context.Context, dialogs []tg.DialogClass) error {
-	t.userLogin.Metadata.(*UserLoginMetadata).PinnedDialogs = nil
+	t.metadata.PinnedDialogs = nil
 	for _, dialog := range dialogs {
 		if dialog.GetPinned() {
 			portalKey := t.makePortalKeyFromPeer(dialog.GetPeer(), 0)
-			t.userLogin.Metadata.(*UserLoginMetadata).PinnedDialogs = append(t.userLogin.Metadata.(*UserLoginMetadata).PinnedDialogs, portalKey.ID)
+			t.metadata.PinnedDialogs = append(t.metadata.PinnedDialogs, portalKey.ID)
 		}
 	}
 	return t.userLogin.Save(ctx)

@@ -1172,14 +1172,14 @@ func (t *TelegramClient) onNotifySettings(ctx context.Context, e tg.Entities, up
 
 func (t *TelegramClient) onPinnedDialogs(ctx context.Context, e tg.Entities, msg *tg.UpdatePinnedDialogs) error {
 	needsUnpinning := map[networkid.PortalKey]struct{}{}
-	for _, portalID := range t.userLogin.Metadata.(*UserLoginMetadata).PinnedDialogs {
+	for _, portalID := range t.metadata.PinnedDialogs {
 		pt, id, _, err := ids.ParsePortalID(portalID)
 		if err != nil {
 			return err
 		}
 		needsUnpinning[t.makePortalKeyFromID(pt, id, 0)] = struct{}{}
 	}
-	t.userLogin.Metadata.(*UserLoginMetadata).PinnedDialogs = nil
+	t.metadata.PinnedDialogs = nil
 
 	for _, d := range msg.Order {
 		dialog, ok := d.(*tg.DialogPeer)
@@ -1188,7 +1188,7 @@ func (t *TelegramClient) onPinnedDialogs(ctx context.Context, e tg.Entities, msg
 		}
 		portalKey := t.makePortalKeyFromPeer(dialog.Peer, 0)
 		delete(needsUnpinning, portalKey)
-		t.userLogin.Metadata.(*UserLoginMetadata).PinnedDialogs = append(t.userLogin.Metadata.(*UserLoginMetadata).PinnedDialogs, portalKey.ID)
+		t.metadata.PinnedDialogs = append(t.metadata.PinnedDialogs, portalKey.ID)
 
 		res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatInfoChange{
 			ChatInfoChange: &bridgev2.ChatInfoChange{

@@ -76,6 +76,7 @@ type TelegramClient struct {
 	loginID           networkid.UserLoginID
 	userID            networkid.UserID
 	userLogin         *bridgev2.UserLogin
+	metadata          *UserLoginMetadata
 	client            *telegram.Client
 	updatesManager    *updates.Manager
 	clientCtx         context.Context
@@ -184,6 +185,7 @@ func NewTelegramClient(ctx context.Context, tc *TelegramConnector, login *bridge
 		loginID:        login.ID,
 		userID:         networkid.UserID(login.ID),
 		userLogin:      login,
+		metadata:       login.Metadata.(*UserLoginMetadata),
 
 		takeoutAccepted: exsync.NewEvent(),
 
@@ -526,7 +528,7 @@ func (t *TelegramClient) onSession() {
 
 func (t *TelegramClient) onAuthError(err error) {
 	t.sendBadCredentialsOrUnknownError(err)
-	t.userLogin.Metadata.(*UserLoginMetadata).ResetOnLogout()
+	t.metadata.ResetOnLogout()
 	go func() {
 		if err := t.userLogin.Save(context.Background()); err != nil {
 			t.main.Bridge.Log.Err(err).Msg("failed to save user login")
@@ -543,7 +545,7 @@ func (t *TelegramClient) Connect(_ context.Context) {
 	log := zerolog.Ctx(context.Background()).With().Int64("user_id", t.telegramUserID).Logger()
 	ctx = log.WithContext(ctx)
 
-	if !t.userLogin.Metadata.(*UserLoginMetadata).Session.HasAuthKey() {
+	if !t.metadata.Session.HasAuthKey() {
 		log.Warn().Msg("user does not have an auth key, sending bad credentials state")
 		t.sendBadCredentialsOrUnknownError(ErrNoAuthKey)
 		return
@@ -637,7 +639,7 @@ func (t *TelegramClient) getSingleChannel(ctx context.Context, id int64) (*tg.Ch
 func (t *TelegramClient) IsLoggedIn() bool {
 	// TODO use less hacky check than context cancellation
 	return t != nil && t.clientCtx != nil && t.client != nil && t.clientCtx.Err() == nil &&
-		t.userLogin.Metadata.(*UserLoginMetadata).Session.HasAuthKey()
+		t.metadata.Session.HasAuthKey()
 }
 
 func (t *TelegramClient) LogoutRemote(ctx context.Context) {
@@ -648,7 +650,7 @@ func (t *TelegramClient) LogoutRemote(ctx context.Context) {
 
 	log.Info().Msg("Logging out and disconnecting")
 
-	if t.userLogin.Metadata.(*UserLoginMetadata).Session.HasAuthKey() {
+	if t.metadata.Session.HasAuthKey() {
 		log.Info().Msg("User has an auth key, logging out")
 
 		// logging out is best effort, we want to logout even if we can't call the endpoint

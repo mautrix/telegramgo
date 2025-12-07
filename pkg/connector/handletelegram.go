@@ -836,6 +836,7 @@ func (t *TelegramClient) onEntityUpdate(ctx context.Context, e tg.Entities) erro
 }
 
 func (t *TelegramClient) onMessageEdit(ctx context.Context, update IGetMessage) error {
+	zerolog.Ctx(ctx).Trace().Stringer("message_content", update).Msg("Raw message edit content")
 	msg, ok := update.GetMessage().(*tg.Message)
 	if !ok {
 		zerolog.Ctx(ctx).Warn().

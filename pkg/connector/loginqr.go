@@ -85,7 +85,7 @@ func (ql *QRLogin) Start(ctx context.Context) (*bridgev2.LoginStep, error) {
 	ql.qrToken = make(chan qrlogin.Token)
 	ql.auth = make(chan qrAuthResult)
 	go func() {
-		auth, err := qr.Auth(ctx, loggedIn, func(ctx context.Context, token qrlogin.Token) error {
+		auth, err := qr.Auth(ql.ctx, loggedIn, func(ctx context.Context, token qrlogin.Token) error {
 			ql.qrToken <- token
 			return nil
 		})

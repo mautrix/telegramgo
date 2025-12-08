@@ -31,9 +31,8 @@ import (
 )
 
 type qrAuthResult struct {
-	PasswordNeeded bool
-	Authorization  *tg.AuthAuthorization
-	Error          error
+	Authorization *tg.AuthAuthorization
+	Error         error
 }
 
 type QRLogin struct {
@@ -90,7 +89,7 @@ func (ql *QRLogin) Start(ctx context.Context) (*bridgev2.LoginStep, error) {
 			return nil
 		})
 
-		ql.auth <- qrAuthResult{false, auth, err}
+		ql.auth <- qrAuthResult{auth, err}
 	}()
 
 	// Wait for the first QR token and show it to the user.:

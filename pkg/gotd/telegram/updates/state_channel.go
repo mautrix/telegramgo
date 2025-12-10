@@ -259,7 +259,7 @@ func (s *channelState) getDifference(ctx context.Context) error {
 		Limit:  s.diffLim,
 	})
 	if err != nil {
-		if tgerr.Is(err, "CHANNEL_PRIVATE") || tgerr.Is(err, "CHANNEL_INVALID") {
+		if tgerr.Is(err, tg.ErrChannelPrivate) || tgerr.Is(err, tg.ErrChannelInvalid) {
 			if err := s.storage.SetChannelPts(ctx, s.selfID, s.channelID, -1); err != nil {
 				s.log.Error("SetChannelPts error (clear)", zap.Error(err))
 			}

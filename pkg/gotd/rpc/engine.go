@@ -193,43 +193,39 @@ func (e *Engine) retryUntilAck(ctx context.Context, req Request) (sent bool, err
 		return false, errors.Wrap(err, "send")
 	}
 
-	loop := func() error {
-		timer := e.clock.Timer(e.retryInterval)
-		defer clock.StopTimer(timer)
+	timer := e.clock.Timer(e.retryInterval)
+	defer clock.StopTimer(timer)
 
-		for {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-e.reqCtx.Done():
-				return errors.Wrap(e.reqCtx.Err(), "engine forcibly closed")
-			case <-ackChan:
-				return nil
-			case <-timer.C():
-				timer.Reset(e.retryInterval)
+	for {
+		select {
+		case <-ctx.Done():
+			return true, ctx.Err()
+		case <-e.reqCtx.Done():
+			return true, errors.Wrap(e.reqCtx.Err(), "engine forcibly closed")
+		case <-ackChan:
+			return true, nil
+		case <-timer.C():
+			timer.Reset(e.retryInterval)
 
-				log.Debug("Acknowledge timed out, performing retry")
-				if err := e.send(ctx, req.MsgID, req.SeqNo, req.Input); err != nil {
-					if errors.Is(err, context.Canceled) {
-						return nil
-					}
-
-					log.Error("Retry failed", zap.Error(err))
-					return err
+			log.Warn("Acknowledge timed out, performing retry")
+			if err := e.send(ctx, req.MsgID, req.SeqNo, req.Input); err != nil {
+				if errors.Is(err, context.Canceled) {
+					return true, nil
 				}
 
-				retries++
-				if retries >= e.maxRetries {
-					log.Error("Retry limit reached", zap.Int64("msg_id", req.MsgID))
-					return &RetryLimitReachedErr{
-						Retries: retries,
-					}
+				log.Error("Retry failed", zap.Error(err))
+				return true, errors.Wrap(err, "retry send")
+			}
+
+			retries++
+			if retries >= e.maxRetries {
+				log.Error("Retry limit reached", zap.Int64("msg_id", req.MsgID))
+				return true, &RetryLimitReachedErr{
+					Retries: retries,
 				}
 			}
 		}
 	}
-
-	return true, loop()
 }
 
 // NotifyResult notifies engine about received RPC response.
@@ -269,7 +265,6 @@ func (e *Engine) isClosed() bool {
 // All Do method calls of closed engine will return ErrEngineClosed error.
 func (e *Engine) Close() {
 	atomic.StoreUint32(&e.closed, 1)
-	e.log.Info("Close called")
 	e.wg.Wait()
 }
 

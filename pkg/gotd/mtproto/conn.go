@@ -172,7 +172,7 @@ func New(dialer Dialer, opt Options) *Conn {
 // handleClose closes rpc engine and underlying connection on context done.
 func (c *Conn) handleClose(ctx context.Context) error {
 	<-ctx.Done()
-	c.log.Debug("Closing")
+	c.log.Info("Connection context done, closing")
 
 	// Close RPC Engine.
 	c.rpc.ForceClose()
@@ -180,6 +180,7 @@ func (c *Conn) handleClose(ctx context.Context) error {
 	if err := c.conn.Close(); err != nil {
 		c.log.Debug("Failed to cleanup connection", zap.Error(err))
 	}
+	c.log.Info("Connection closed")
 	return nil
 }
 
@@ -198,24 +199,22 @@ func (c *Conn) Run(ctx context.Context, f func(ctx context.Context) error) error
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	c.log.Debug("Run: start")
-	defer c.log.Debug("Run: end")
+	c.log.Info("Run: start")
+	defer c.log.Info("Run: end")
 	if err := c.connect(ctx); err != nil {
 		return errors.Wrap(err, "start")
 	}
-	{
-		// All goroutines are bound to current call.
-		g := tdsync.NewLogGroup(ctx, c.log.Named("group"))
-		g.Go("handleClose", c.handleClose)
-		g.Go("pingLoop", c.pingLoop)
-		g.Go("ackLoop", c.ackLoop)
-		g.Go("saltsLoop", c.saltLoop)
-		g.Go("userCallback", f)
-		g.Go("readLoop", c.readLoop)
+	// All goroutines are bound to current call.
+	g := tdsync.NewLogGroup(ctx, c.log.Named("group"))
+	g.Go("handleClose", c.handleClose)
+	g.Go("pingLoop", c.pingLoop)
+	g.Go("ackLoop", c.ackLoop)
+	g.Go("saltsLoop", c.saltLoop)
+	g.Go("userCallback", f)
+	g.Go("readLoop", c.readLoop)
 
-		if err := g.Wait(); err != nil {
-			return errors.Wrap(err, "group")
-		}
+	if err := g.Wait(); err != nil {
+		return errors.Wrap(err, "group")
 	}
 	return nil
 }

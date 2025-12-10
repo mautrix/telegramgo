@@ -80,6 +80,8 @@ type UserLoginMetadata struct {
 	Session     UserLoginSession `json:"session"`
 	TakeoutID   int64            `json:"takeout_id,omitempty"`
 
+	TakeoutInvalidated bool `json:"takeout_invalidated,omitempty"`
+
 	TakeoutDialogCrawlDone   bool               `json:"takeout_portal_crawl_done,omitempty"`
 	TakeoutDialogCrawlCursor networkid.PortalID `json:"takeout_portal_crawl_cursor,omitempty"`
 
@@ -92,6 +94,7 @@ func (u *UserLoginMetadata) ResetOnLogout() {
 	u.Session.AuthKey = nil
 	u.TakeoutID = 0
 	u.TakeoutDialogCrawlDone = false
+	u.TakeoutInvalidated = false
 	u.TakeoutDialogCrawlCursor = networkid.PortalID("")
 	u.PushEncryptionKey = nil
 }

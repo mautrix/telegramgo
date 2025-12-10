@@ -394,7 +394,8 @@ func (s *internalState) createAndRunChannelState(ctx context.Context, channelID,
 			s.channelsLock.Lock()
 			delete(s.channels, channelID)
 			s.channelsLock.Unlock()
-			s.log.Info("Removed channel state due to error", zap.Int64("channel_id", channelID))
+			s.log.Info("Removed channel state due to error", zap.Int64("channel_id", channelID), zap.Error(err))
+			return nil
 		}
 		return err
 	})

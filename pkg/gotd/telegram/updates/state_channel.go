@@ -2,6 +2,7 @@ package updates
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/go-faster/errors"
@@ -10,6 +11,7 @@ import (
 
 	"go.mau.fi/mautrix-telegram/pkg/gotd/telegram"
 	"go.mau.fi/mautrix-telegram/pkg/gotd/tg"
+	"go.mau.fi/mautrix-telegram/pkg/gotd/tgerr"
 )
 
 type channelUpdate struct {
@@ -40,6 +42,9 @@ type channelState struct {
 	tracer     trace.Tracer
 	handler    telegram.UpdateHandler
 	onTooLong  func(channelID int64) error
+
+	runCtx context.Context
+	stop   context.CancelCauseFunc
 }
 
 type channelStateConfig struct {
@@ -90,33 +95,42 @@ func (s *channelState) Push(ctx context.Context, u channelUpdate) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
+	case <-s.runCtx.Done():
+		return s.runCtx.Err()
 	case s.updates <- u:
 		return nil
 	}
 }
 
+var ErrRemoveChannelState = errors.New("remove channel state")
+
 func (s *channelState) Run(ctx context.Context) error {
+	s.runCtx, s.stop = context.WithCancelCause(ctx)
+	defer s.stop(nil)
 	// Subscribe to channel updates.
-	if err := s.getDifference(ctx); err != nil {
+	if err := s.getDifference(s.runCtx); err != nil {
 		s.log.Error("Failed to subscribe to channel updates", zap.Error(err))
 	}
 
 	for {
 		select {
 		case u := <-s.updates:
-			ctx := trace.ContextWithSpanContext(ctx, u.span)
+			ctx := trace.ContextWithSpanContext(s.runCtx, u.span)
 			if err := s.handleUpdate(ctx, u.update, u.entities); err != nil {
 				s.log.Error("Handle update error", zap.Error(err))
 			}
 		case <-s.pts.gapTimeout.C:
 			s.log.Debug("Gap timeout")
-			s.getDifferenceLogger(ctx)
-		case <-ctx.Done():
-			return ctx.Err()
+			s.getDifferenceLogger(s.runCtx)
+		case <-s.runCtx.Done():
+			if cause := context.Cause(s.runCtx); cause != nil && ctx.Err() == nil {
+				return cause
+			}
+			return s.runCtx.Err()
 		case <-s.idleTimeout.C:
 			s.log.Debug("Idle timeout")
 			s.resetIdleTimer()
-			s.getDifferenceLogger(ctx)
+			s.getDifferenceLogger(s.runCtx)
 		}
 	}
 }
@@ -245,6 +259,12 @@ func (s *channelState) getDifference(ctx context.Context) error {
 		Limit:  s.diffLim,
 	})
 	if err != nil {
+		if tgerr.Is(err, "CHANNEL_PRIVATE") || tgerr.Is(err, "CHANNEL_INVALID") {
+			if err := s.storage.SetChannelPts(ctx, s.selfID, s.channelID, -1); err != nil {
+				s.log.Error("SetChannelPts error (clear)", zap.Error(err))
+			}
+			s.stop(fmt.Errorf("%w: %w", ErrRemoveChannelState, err))
+		}
 		return errors.Wrap(err, "get channel difference")
 	}
 

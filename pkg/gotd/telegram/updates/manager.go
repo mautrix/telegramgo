@@ -106,6 +106,9 @@ func (m *Manager) Run(ctx context.Context, api API, userID int64, opt AuthOption
 			AccessHash int64
 		})
 		if err := m.cfg.Storage.ForEachChannels(ctx, userID, func(ctx context.Context, channelID int64, pts int) error {
+			if pts == -1 {
+				return nil
+			}
 			hash, found, err := m.cfg.AccessHasher.GetChannelAccessHash(ctx, userID, channelID)
 			if err != nil {
 				return errors.Wrap(err, "get channel access hash")

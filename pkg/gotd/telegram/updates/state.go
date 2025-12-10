@@ -3,6 +3,7 @@ package updates
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/go-faster/errors"
@@ -44,7 +45,8 @@ type internalState struct {
 	idleTimeout   *time.Timer
 
 	// Channel states.
-	channels map[int64]*channelState
+	channels     map[int64]*channelState
+	channelsLock sync.Mutex
 
 	// Immutable fields.
 	client    API
@@ -117,11 +119,10 @@ func newState(ctx context.Context, cfg stateConfig) *internalState {
 	})
 
 	for id, info := range cfg.Channels {
-		state := s.newChannelState(id, info.AccessHash, info.Pts)
-		s.channels[id] = state
-		s.wg.Go(func() error {
-			return state.Run(ctx)
-		})
+		if info.Pts == -1 {
+			continue
+		}
+		s.createAndRunChannelState(ctx, id, info.AccessHash, info.Pts)
 	}
 
 	return s
@@ -332,7 +333,9 @@ func (s *internalState) handleChannel(ctx context.Context, channelID int64, date
 		return nil
 	}
 
+	s.channelsLock.Lock()
 	state, ok := s.channels[channelID]
+	s.channelsLock.Unlock()
 	if !ok {
 		accessHash, found, err := s.hasher.GetChannelAccessHash(context.Background(), s.selfID, channelID)
 		if err != nil {
@@ -359,6 +362,9 @@ func (s *internalState) handleChannel(ctx context.Context, channelID int64, date
 		}
 
 		localPts, found, err := s.storage.GetChannelPts(ctx, s.selfID, channelID)
+		if localPts == -1 {
+			found = false
+		}
 		if err != nil {
 			localPts = pts - ptsCount
 			s.log.Error("GetChannelPts error", zap.Error(err))
@@ -371,14 +377,28 @@ func (s *internalState) handleChannel(ctx context.Context, channelID int64, date
 			}
 		}
 
-		state = s.newChannelState(channelID, accessHash, localPts)
-		s.channels[channelID] = state
-		s.wg.Go(func() error {
-			return state.Run(ctx)
-		})
+		state = s.createAndRunChannelState(ctx, channelID, accessHash, localPts)
 	}
 
 	return state.Push(ctx, cu)
+}
+
+func (s *internalState) createAndRunChannelState(ctx context.Context, channelID, accessHash int64, initialPts int) (state *channelState) {
+	state = s.newChannelState(channelID, accessHash, initialPts)
+	s.channelsLock.Lock()
+	s.channels[channelID] = state
+	s.channelsLock.Unlock()
+	s.wg.Go(func() error {
+		err := state.Run(ctx)
+		if errors.Is(err, ErrRemoveChannelState) {
+			s.channelsLock.Lock()
+			delete(s.channels, channelID)
+			s.channelsLock.Unlock()
+			s.log.Info("Removed channel state due to error", zap.Int64("channel_id", channelID))
+		}
+		return err
+	})
+	return state
 }
 
 func (s *internalState) newChannelState(channelID, accessHash int64, initialPts int) *channelState {

@@ -29,19 +29,23 @@ type connection struct {
 	writeMux sync.Mutex
 }
 
+var (
+	DefaultWriteDeadline = 1 * time.Minute
+	DefaultReadDeadline  = 2 * time.Minute
+)
+
 // Send sends message from buffer using MTProto connection.
 func (c *connection) Send(ctx context.Context, b *bin.Buffer) error {
 	// Serializing access to deadlines.
 	c.writeMux.Lock()
 	defer c.writeMux.Unlock()
 
-	if err := c.conn.SetWriteDeadline(time.Time{}); err != nil {
-		return errors.Wrap(err, "reset write deadline")
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		deadline = time.Now().Add(DefaultWriteDeadline)
 	}
-	if deadline, ok := ctx.Deadline(); ok {
-		if err := c.conn.SetWriteDeadline(deadline); err != nil {
-			return errors.Wrap(err, "set write deadline")
-		}
+	if err := c.conn.SetWriteDeadline(deadline); err != nil {
+		return errors.Wrap(err, "set write deadline")
 	}
 
 	if err := c.codec.Write(c.conn, b); err != nil {
@@ -57,13 +61,12 @@ func (c *connection) Recv(ctx context.Context, b *bin.Buffer) error {
 	c.readMux.Lock()
 	defer c.readMux.Unlock()
 
-	if err := c.conn.SetReadDeadline(time.Time{}); err != nil {
-		return errors.Wrap(err, "reset read deadline")
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		deadline = time.Now().Add(DefaultReadDeadline)
 	}
-	if deadline, ok := ctx.Deadline(); ok {
-		if err := c.conn.SetReadDeadline(deadline); err != nil {
-			return errors.Wrap(err, "set read deadline")
-		}
+	if err := c.conn.SetReadDeadline(deadline); err != nil {
+		return errors.Wrap(err, "set read deadline")
 	}
 
 	if err := c.codec.Read(c.conn, b); err != nil {

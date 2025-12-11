@@ -161,6 +161,13 @@ func (m *Manager) Run(ctx context.Context, api API, userID int64, opt AuthOption
 	return wg.Wait()
 }
 
+func (m *Manager) RemoveChannel(channelID int64, reason error) {
+	if m == nil {
+		return
+	}
+	m.state.RemoveChannel(channelID, reason)
+}
+
 func (m *Manager) loadState(ctx context.Context, api API, userID int64, forget bool) (State, error) {
 onNotFound:
 	var state State

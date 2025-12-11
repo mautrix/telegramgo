@@ -54,12 +54,13 @@ type IGetMessages interface {
 	GetMessages() []int
 }
 
-func (t *TelegramClient) selfLeaveChat(ctx context.Context, portalKey networkid.PortalKey) error {
+func (t *TelegramClient) selfLeaveChat(ctx context.Context, portalKey networkid.PortalKey, reason error) error {
 	peerType, id, _, err := ids.ParsePortalID(portalKey.ID)
 	if err != nil {
 		return err
 	}
 	if peerType == ids.PeerTypeChannel {
+		t.updatesManager.RemoveChannel(id, reason)
 		topics, err := t.main.Store.Topic.GetAll(ctx, id)
 		if err != nil {
 			return err
@@ -127,17 +128,17 @@ func (t *TelegramClient) onUpdateChannel(ctx context.Context, e tg.Entities, upd
 	})
 	if err != nil {
 		if tgerr.Is(err, tg.ErrChannelInvalid, tg.ErrChannelPrivate) {
-			return t.selfLeaveChat(ctx, portalKey)
+			return t.selfLeaveChat(ctx, portalKey, fmt.Errorf("error fetching after UpdateChannel: %w", err))
 		}
 		log.Err(err).Msg("Failed to get channel info after UpdateChannel event")
 	} else if len(chats.GetChats()) != 1 {
 		log.Warn().Int("chat_count", len(chats.GetChats())).Msg("Got more than 1 chat in GetChannels response")
 	} else if channel, ok := chats.GetChats()[0].(*tg.Channel); !ok {
 		log.Error().Type("chat_type", chats.GetChats()[0]).Msg("Expected channel, got something else. Leaving the channel.")
-		return t.selfLeaveChat(ctx, portalKey)
+		return t.selfLeaveChat(ctx, portalKey, fmt.Errorf("channel not returned in getChannels after UpdateChannel"))
 	} else if channel.Left {
 		log.Error().Msg("Update was for a left channel. Leaving the channel.")
-		return t.selfLeaveChat(ctx, portalKey)
+		return t.selfLeaveChat(ctx, portalKey, fmt.Errorf("channel has left=true in getChannels after UpdateChannel"))
 	} else {
 		res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatResync{
 			EventMeta: simplevent.EventMeta{
@@ -340,7 +341,7 @@ func (t *TelegramClient) handleServiceMessage(ctx context.Context, msg *tg.Messa
 		return resultToError(res)
 	case *tg.MessageActionChatDeleteUser:
 		if action.UserID == t.telegramUserID {
-			return t.selfLeaveChat(ctx, eventMeta.PortalKey)
+			return t.selfLeaveChat(ctx, eventMeta.PortalKey, fmt.Errorf("delete user event for chat"))
 		}
 		res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.ChatInfoChange{
 			EventMeta: eventMeta.WithType(bridgev2.RemoteEventChatInfoChange),
@@ -824,11 +825,14 @@ func (t *TelegramClient) onEntityUpdate(ctx context.Context, e tg.Entities) erro
 	}
 	for chatID, chat := range e.Chats {
 		if chat.GetLeft() {
-			t.selfLeaveChat(ctx, t.makePortalKeyFromID(ids.PeerTypeChat, chatID, 0))
+			// TODO don't ignore errors
+			t.selfLeaveChat(ctx, t.makePortalKeyFromID(ids.PeerTypeChat, chatID, 0), fmt.Errorf("left flag in entity update"))
 		}
 	}
 	for _, channel := range e.Channels {
-		if _, err := t.updateChannel(ctx, channel); err != nil {
+		if channel.GetLeft() {
+			t.selfLeaveChat(ctx, t.makePortalKeyFromID(ids.PeerTypeChannel, channel.ID, 0), fmt.Errorf("left flag in entity update"))
+		} else if _, err := t.updateChannel(ctx, channel); err != nil {
 			return err
 		}
 	}

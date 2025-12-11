@@ -383,6 +383,19 @@ func (s *internalState) handleChannel(ctx context.Context, channelID int64, date
 	return state.Push(ctx, cu)
 }
 
+func (s *internalState) RemoveChannel(channelID int64, reason error) {
+	if s == nil {
+		return
+	}
+	s.channelsLock.Lock()
+	state, ok := s.channels[channelID]
+	s.channelsLock.Unlock()
+	if !ok {
+		return
+	}
+	state.stop(fmt.Errorf("%w: %w", ErrRemoveChannelState, reason))
+}
+
 func (s *internalState) createAndRunChannelState(ctx context.Context, channelID, accessHash int64, initialPts int) (state *channelState) {
 	state = s.newChannelState(channelID, accessHash, initialPts)
 	s.channelsLock.Lock()

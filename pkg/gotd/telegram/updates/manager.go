@@ -84,8 +84,8 @@ func (m *Manager) Run(ctx context.Context, api API, userID int64, opt AuthOption
 		zap.Bool("is_bot", opt.IsBot),
 		zap.Bool("forget", opt.Forget),
 	)
-	lg.Info("Starting update manager")
-	defer lg.Info("Update manager exiting")
+	lg.Debug("Starting update manager")
+	defer lg.Debug("Update manager exiting")
 
 	wg, ctx := errgroup.WithContext(ctx)
 

@@ -541,16 +541,24 @@ func (t *TelegramClient) runInBackground(ctx context.Context) {
 	log := zerolog.Ctx(ctx)
 	err := t.client.Run(ctx, func(ctx context.Context) error {
 		t.clientInitialized.Set()
-		log.Info().Msg("Client running starting updates")
-		return t.updatesManager.Run(ctx, t.client.API(), t.telegramUserID, updates.AuthOptions{
+		log.Info().Msg("Client running, starting updates")
+		err := t.updatesManager.Run(ctx, t.client.API(), t.telegramUserID, updates.AuthOptions{
 			IsBot: t.metadata.IsBot,
 		})
+		if err != nil && !errors.Is(err, ctx.Err()) {
+			log.Warn().Err(err).Msg("Update manager exited with error")
+		} else {
+			log.Info().Msg("Update manager exited without error")
+		}
+		return err
 	})
 	t.clientDone.Set()
 	t.clientInitialized.Set()
 	if err != nil {
 		log.Err(err).Msg("Client exited with error")
 		t.sendBadCredentialsOrUnknownError(err)
+	} else {
+		log.Debug().Msg("Client exited without error")
 	}
 }
 

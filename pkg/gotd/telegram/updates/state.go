@@ -397,7 +397,20 @@ func (s *internalState) RemoveChannel(channelID int64, reason error) {
 }
 
 func (s *internalState) createAndRunChannelState(ctx context.Context, channelID, accessHash int64, initialPts int) (state *channelState) {
-	state = s.newChannelState(channelID, accessHash, initialPts)
+	state = newChannelState(ctx, channelStateConfig{
+		Out:              s.internalQueue,
+		InitialPts:       initialPts,
+		ChannelID:        channelID,
+		AccessHash:       accessHash,
+		SelfID:           s.selfID,
+		Storage:          s.storage,
+		DiffLimit:        s.diffLim,
+		RawClient:        s.client,
+		Handler:          s.handler,
+		OnChannelTooLong: s.onTooLong,
+		Logger:           s.log.Named("channel").With(zap.Int64("channel_id", channelID)),
+		Tracer:           s.tracer,
+	})
 	s.channelsLock.Lock()
 	s.channels[channelID] = state
 	s.channelsLock.Unlock()
@@ -413,23 +426,6 @@ func (s *internalState) createAndRunChannelState(ctx context.Context, channelID,
 		return err
 	})
 	return state
-}
-
-func (s *internalState) newChannelState(channelID, accessHash int64, initialPts int) *channelState {
-	return newChannelState(channelStateConfig{
-		Out:              s.internalQueue,
-		InitialPts:       initialPts,
-		ChannelID:        channelID,
-		AccessHash:       accessHash,
-		SelfID:           s.selfID,
-		Storage:          s.storage,
-		DiffLimit:        s.diffLim,
-		RawClient:        s.client,
-		Handler:          s.handler,
-		OnChannelTooLong: s.onTooLong,
-		Logger:           s.log.Named("channel").With(zap.Int64("channel_id", channelID)),
-		Tracer:           s.tracer,
-	})
 }
 
 func (s *internalState) getDifference(ctx context.Context) error {

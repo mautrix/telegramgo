@@ -537,7 +537,9 @@ func (t *TelegramClient) Connect(_ context.Context) {
 
 	runTelegramClient(ctx, t.client, t.clientInitialized, t.clientDone, func(ctx context.Context) error {
 		log.Info().Msg("Client running starting updates")
-		return t.updatesManager.Run(ctx, t.client.API(), t.telegramUserID, updates.AuthOptions{})
+		return t.updatesManager.Run(ctx, t.client.API(), t.telegramUserID, updates.AuthOptions{
+			IsBot: t.metadata.IsBot,
+		})
 	})
 }
 

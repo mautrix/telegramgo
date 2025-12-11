@@ -84,8 +84,8 @@ func (m *Manager) Run(ctx context.Context, api API, userID int64, opt AuthOption
 		zap.Bool("is_bot", opt.IsBot),
 		zap.Bool("forget", opt.Forget),
 	)
-	lg.Debug("Run")
-	defer lg.Debug("Done")
+	lg.Info("Starting update manager")
+	defer lg.Info("Update manager exiting")
 
 	wg, ctx := errgroup.WithContext(ctx)
 
@@ -157,7 +157,7 @@ func (m *Manager) Run(ctx context.Context, api API, userID int64, opt AuthOption
 	wg.Go(func() error {
 		return m.state.Run(ctx)
 	})
-	lg.Debug("Wait")
+	lg.Debug("Waiting for manager workgroup to exit")
 	return wg.Wait()
 }
 

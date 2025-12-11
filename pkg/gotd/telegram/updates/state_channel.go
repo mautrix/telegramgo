@@ -62,7 +62,7 @@ type channelStateConfig struct {
 	Tracer           trace.Tracer
 }
 
-func newChannelState(cfg channelStateConfig) *channelState {
+func newChannelState(ctx context.Context, cfg channelStateConfig) *channelState {
 	state := &channelState{
 		updates: make(chan channelUpdate, 10),
 		out:     cfg.Out,
@@ -88,6 +88,8 @@ func newChannelState(cfg channelStateConfig) *channelState {
 		Tracer:       cfg.Tracer,
 	})
 
+	state.runCtx, state.stop = context.WithCancelCause(ctx)
+
 	return state
 }
 
@@ -105,7 +107,6 @@ func (s *channelState) Push(ctx context.Context, u channelUpdate) error {
 var ErrRemoveChannelState = errors.New("remove channel state")
 
 func (s *channelState) Run(ctx context.Context) error {
-	s.runCtx, s.stop = context.WithCancelCause(ctx)
 	defer s.stop(nil)
 	// Subscribe to channel updates.
 	if err := s.getDifference(s.runCtx); err != nil {

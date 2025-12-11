@@ -5,13 +5,14 @@
 type Handler = func(context.Context, Entities, UpdateClass) error
 
 type UpdateDispatcher struct {
-    handlers map[uint32]Handler
+	handlers map[uint32]Handler
 	fallback Handler
 }
 
 func NewUpdateDispatcher() UpdateDispatcher {
-    return UpdateDispatcher{
-        handlers: map[uint32]Handler{},
+	return UpdateDispatcher{
+		handlers: map[uint32]Handler{},
+		fallback: func(ctx context.Context, entities Entities, class UpdateClass) error { return nil },
     }
 }
 
@@ -67,16 +68,16 @@ func (u UpdateDispatcher) Handle(ctx context.Context, updates UpdatesClass) erro
 }
 
 func (u UpdateDispatcher) dispatch(ctx context.Context, e Entities, update UpdateClass) error {
-    if update == nil {
-        return nil
-    }
-    typeID := update.TypeID()
-    handler, ok := u.handlers[typeID]
+	if update == nil {
+		return nil
+	}
+	if err := u.fallback(ctx, e, update); err != nil {
+		return err
+	}
+	typeID := update.TypeID()
+	handler, ok := u.handlers[typeID]
 	if ok {
 		return handler(ctx, e, update)
-	}
-	if u.fallback != nil {
-		return u.fallback(ctx, e, update)
 	}
 	return nil
 }

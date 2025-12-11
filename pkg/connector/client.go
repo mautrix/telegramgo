@@ -113,32 +113,6 @@ type TelegramClient struct {
 
 var _ bridgev2.NetworkAPI = (*TelegramClient)(nil)
 
-type UpdateDispatcher struct {
-	tg.UpdateDispatcher
-	EntityHandler func(context.Context, tg.Entities) error
-}
-
-func (u UpdateDispatcher) Handle(ctx context.Context, updates tg.UpdatesClass) error {
-	var e tg.Entities
-	switch u := updates.(type) {
-	case *tg.Updates:
-		e.Users = u.MapUsers().NotEmptyToMap()
-		chats := u.MapChats()
-		e.Chats = chats.ChatToMap()
-		e.Channels = chats.ChannelToMap()
-	case *tg.UpdatesCombined:
-		e.Users = u.MapUsers().NotEmptyToMap()
-		chats := u.MapChats()
-		e.Chats = chats.ChatToMap()
-		e.Channels = chats.ChannelToMap()
-	}
-	if u.EntityHandler != nil {
-		u.EntityHandler(ctx, e)
-	}
-
-	return u.UpdateDispatcher.Handle(ctx, updates)
-}
-
 var messageLinkRegex = regexp.MustCompile(`^https?://t(?:elegram)?\.(?:me|dog)/([A-Za-z][A-Za-z0-9_]{3,31}[A-Za-z0-9]|[Cc]/[0-9]{1,20})/([0-9]{1,20})(?:/([0-9]{1,20}))?$`)
 
 func (tg *TelegramConnector) deviceConfig() telegram.DeviceConfig {
@@ -198,10 +172,8 @@ func NewTelegramClient(ctx context.Context, tc *TelegramConnector, login *bridge
 		return &client, nil
 	}
 
-	dispatcher := UpdateDispatcher{
-		UpdateDispatcher: tg.NewUpdateDispatcher(),
-		EntityHandler:    client.onEntityUpdate,
-	}
+	dispatcher := tg.NewUpdateDispatcher()
+	dispatcher.OnFallback(client.onEntityUpdate)
 	dispatcher.OnNewMessage(func(ctx context.Context, e tg.Entities, update *tg.UpdateNewMessage) error {
 		return client.onUpdateNewMessage(ctx, e, update)
 	})

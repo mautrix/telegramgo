@@ -41,6 +41,7 @@ type UpdateDispatcher struct {
 func NewUpdateDispatcher() UpdateDispatcher {
 	return UpdateDispatcher{
 		handlers: map[uint32]Handler{},
+		fallback: func(ctx context.Context, entities Entities, class UpdateClass) error { return nil },
 	}
 }
 
@@ -99,13 +100,13 @@ func (u UpdateDispatcher) dispatch(ctx context.Context, e Entities, update Updat
 	if update == nil {
 		return nil
 	}
+	if err := u.fallback(ctx, e, update); err != nil {
+		return err
+	}
 	typeID := update.TypeID()
 	handler, ok := u.handlers[typeID]
 	if ok {
 		return handler(ctx, e, update)
-	}
-	if u.fallback != nil {
-		return u.fallback(ctx, e, update)
 	}
 	return nil
 }

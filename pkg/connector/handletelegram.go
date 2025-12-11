@@ -817,7 +817,7 @@ func (t *TelegramClient) updateChannel(ctx context.Context, channel *tg.Channel)
 	return userInfo, nil
 }
 
-func (t *TelegramClient) onEntityUpdate(ctx context.Context, e tg.Entities) error {
+func (t *TelegramClient) onEntityUpdate(ctx context.Context, e tg.Entities, _ tg.UpdateClass) error {
 	for userID, user := range e.Users {
 		if _, err := t.updateGhost(ctx, userID, user); err != nil {
 			return err

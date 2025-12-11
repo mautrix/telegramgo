@@ -139,8 +139,8 @@ func (c *Client) Run(ctx context.Context, f func(ctx context.Context) error) (er
 	// handling or pool creation.
 	c.ctx, c.cancel = context.WithCancel(ctx)
 
-	c.log.Info("Starting")
-	defer c.log.Info("Closed")
+	c.log.Info("Client starting")
+	defer c.log.Info("Client closed")
 	// Cancel client on exit.
 	defer c.cancel()
 	defer func() {

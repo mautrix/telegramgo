@@ -17,6 +17,7 @@
 package connector
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -25,7 +26,6 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
-	"go.mau.fi/util/exsync"
 	"go.mau.fi/zerozap"
 	"go.uber.org/zap"
 	"maunium.net/go/mautrix/bridgev2"
@@ -136,13 +136,22 @@ func (bl *baseLogin) makeClient(ctx context.Context, dispatcher *tg.UpdateDispat
 	})
 
 	bl.ctx, bl.cancel = context.WithTimeoutCause(log.WithContext(bl.main.Bridge.BackgroundCtx), LoginTimeout, ErrLoginTimeout)
-	initialized := exsync.NewEvent()
-	done := NewFuture[error]()
-	runTelegramClient(bl.ctx, bl.client, initialized, done, waitContextDone)
+	connectResult := NewFuture[error]()
+	go func() {
+		err := bl.client.Run(bl.ctx, func(ctx context.Context) error {
+			connectResult.Set(nil)
+			<-ctx.Done()
+			return ctx.Err()
+		})
+		connectResult.Set(err)
+		if err != nil && !errors.Is(err, bl.ctx.Err()) {
+			log.Err(err).Msg("Login client exited with error")
+		}
+	}()
 
 	log.Debug().Msg("Waiting for client to connect")
-	err := initialized.Wait(ctx)
-	if err != nil {
+	connErr, ctxErr := connectResult.Get(ctx)
+	if err := cmp.Or(connErr, ctxErr); err != nil {
 		bl.Cancel()
 		return err
 	}

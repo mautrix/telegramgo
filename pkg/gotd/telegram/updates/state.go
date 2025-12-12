@@ -329,6 +329,21 @@ func (s *internalState) handleChannel(ctx context.Context, channelID int64, date
 		s.log.Error("Pts validation failed", zap.Error(err), zap.Any("update", cu.update))
 		return nil
 	}
+	for _, ent := range cu.entities.Chats {
+		if ent.GetID() == channelID {
+			switch te := ent.(type) {
+			case *tg.Channel:
+				if te.Left {
+					s.log.Info("Not adding new channel state for left channel", zap.Int64("channel_id", channelID))
+					return nil
+				}
+			case *tg.ChannelForbidden:
+				s.log.Info("Not adding new channel state for forbidden channel", zap.Int64("channel_id", channelID))
+				return nil
+			}
+			break
+		}
+	}
 
 	s.channelsLock.Lock()
 	state, ok := s.channels[channelID]
@@ -374,6 +389,7 @@ func (s *internalState) handleChannel(ctx context.Context, channelID int64, date
 			}
 		}
 
+		s.log.Info("Adding new channel state", zap.Int64("channel_id", channelID), zap.Int("local_pts", localPts), zap.Int("remote_pts", pts))
 		state = s.createAndRunChannelState(ctx, channelID, accessHash, localPts)
 	}
 

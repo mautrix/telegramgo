@@ -155,14 +155,14 @@ func (m *Manager) Run(ctx context.Context, api API, userID int64, opt AuthOption
 			} else if !found {
 				return nil
 			} else if isMember, err := m.checkParticipant(ctx, api, userID, channelID, hash); err != nil {
-				return fmt.Errorf("failed to check if user is participant of channel %d: %w", channelID, err)
+				return fmt.Errorf("failed to check if user is participant: %w", err)
 			} else if !isMember {
 				return nil
 			}
 			channels[channelID] = PtsAccessHashTuple{Pts: pts, AccessHash: hash}
 			return nil
 		}); err != nil {
-			return errors.Wrap(err, "iterate channels")
+			return err
 		}
 
 		diffLim := diffLimitUser

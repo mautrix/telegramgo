@@ -81,7 +81,7 @@ type PtsAccessHashTuple struct {
 	AccessHash int64
 }
 
-func (m *Manager) checkParticipant(ctx context.Context, api API, userID, channelID, hash int64) error {
+func (m *Manager) checkParticipant(ctx context.Context, api API, userID, channelID, hash int64) (isMember bool, err error) {
 	lg := m.lg.With(zap.Int64("channel_id", channelID))
 	lg.Info("Ensuring user is still in channel")
 	pcp, err := api.ChannelsGetParticipant(ctx, &tg.ChannelsGetParticipantRequest{
@@ -97,7 +97,7 @@ func (m *Manager) checkParticipant(ctx context.Context, api API, userID, channel
 		} else {
 			lg.Error("channels.getParticipant failed", zap.Error(err))
 			// TODO fatal error?
-			return nil
+			return true, nil
 		}
 	} else {
 		switch pcp.Participant.(type) {
@@ -105,16 +105,16 @@ func (m *Manager) checkParticipant(ctx context.Context, api API, userID, channel
 			lg.Warn("Removing update state for channel as user is left or banned")
 		default:
 			lg.Debug("Membership confirmed", zap.Any("participant", pcp.Participant))
-			return nil
+			return true, nil
 		}
 	}
 
 	if err := m.cfg.Storage.SetChannelPts(ctx, userID, channelID, -1); err != nil {
-		return fmt.Errorf("failed to clear pts: %w", err)
+		return false, fmt.Errorf("failed to clear pts: %w", err)
 	} else if err = m.cfg.OnNotChannelMember(ctx, channelID); err != nil {
-		return fmt.Errorf("OnNotChannelMember callback failed: %w", err)
+		return false, fmt.Errorf("OnNotChannelMember callback failed: %w", err)
 	}
-	return nil
+	return false, nil
 }
 
 // Run notifies manager about user authentication on the telegram server.
@@ -154,8 +154,10 @@ func (m *Manager) Run(ctx context.Context, api API, userID int64, opt AuthOption
 				return errors.Wrap(err, "get channel access hash")
 			} else if !found {
 				return nil
-			} else if err = m.checkParticipant(ctx, api, userID, channelID, hash); err != nil {
+			} else if isMember, err := m.checkParticipant(ctx, api, userID, channelID, hash); err != nil {
 				return fmt.Errorf("failed to check if user is participant of channel %d: %w", channelID, err)
+			} else if !isMember {
+				return nil
 			}
 			channels[channelID] = PtsAccessHashTuple{Pts: pts, AccessHash: hash}
 			return nil

@@ -102,6 +102,8 @@ type TelegramClient struct {
 
 	cachedContacts     *tg.ContactsContacts
 	cachedContactsHash int64
+	contactsLock       sync.Mutex
+	lastContactReq     time.Time
 
 	takeoutLock        sync.Mutex
 	takeoutAccepted    *exsync.Event

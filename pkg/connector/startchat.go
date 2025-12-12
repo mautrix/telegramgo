@@ -23,6 +23,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/rs/zerolog"
 	"go.mau.fi/util/ptr"
@@ -200,25 +201,34 @@ func (t *TelegramClient) SearchUsers(ctx context.Context, query string) (resp []
 }
 
 func (t *TelegramClient) GetContactList(ctx context.Context) (resp []*bridgev2.ResolveIdentifierResponse, err error) {
-	contacts, err := APICallWithOnlyUserUpdates(ctx, t, func() (*tg.ContactsContacts, error) {
-		c, err := t.client.API().ContactsGetContacts(ctx, t.cachedContactsHash)
+	t.contactsLock.Lock()
+	defer t.contactsLock.Unlock()
+	var contacts *tg.ContactsContacts
+	if time.Since(t.lastContactReq) > 10*time.Minute {
+		contacts, err = APICallWithOnlyUserUpdates(ctx, t, func() (*tg.ContactsContacts, error) {
+			c, err := t.client.API().ContactsGetContacts(ctx, t.cachedContactsHash)
+			if err != nil {
+				return nil, err
+			}
+			switch typedResp := c.(type) {
+			case *tg.ContactsContacts:
+				t.cachedContacts = typedResp
+				var h hasher.Hasher
+				for _, contact := range t.cachedContacts.Contacts {
+					h.Update(uint32(contact.UserID))
+				}
+				t.cachedContactsHash = h.Sum()
+			case *tg.ContactsContactsNotModified:
+				// No changes
+			default:
+				return nil, fmt.Errorf("unexpected contacts type: %T", c)
+			}
+			return t.cachedContacts, nil
+		})
 		if err != nil {
 			return nil, err
 		}
-		if c.TypeID() == tg.ContactsContactsTypeID {
-			t.cachedContacts = c.(*tg.ContactsContacts)
-			var h hasher.Hasher
-			for _, contact := range t.cachedContacts.Contacts {
-				h.Update(uint32(contact.UserID))
-			}
-			t.cachedContactsHash = h.Sum()
-		} else if c.TypeID() != tg.ContactsContactsNotModifiedTypeID {
-			return nil, fmt.Errorf("unexpected contacts type: %T", c)
-		}
-		return t.cachedContacts, nil
-	})
-	if err != nil {
-		return nil, err
+		t.lastContactReq = time.Now()
 	}
 	users := map[int64]tg.UserClass{}
 	for _, user := range contacts.GetUsers() {

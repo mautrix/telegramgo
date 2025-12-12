@@ -548,22 +548,22 @@ func (t *TelegramClient) runInBackground(ctx context.Context) {
 			IsBot: t.metadata.IsBot,
 		})
 		if err != nil && !errors.Is(err, ctx.Err()) {
-			log.Warn().Err(err).Msg("Update manager exited with error")
+			log.Warn().Err(err).AnErr("ctx_err", ctx.Err()).Msg("Update manager exited with error")
 		} else {
-			log.Info().Msg("Update manager exited without error")
+			log.Info().AnErr("ctx_err", ctx.Err()).Msg("Update manager exited without error")
 		}
 		return err
 	})
 	t.clientDone.Set()
 	t.clientInitialized.Set()
 	if err != nil {
-		log.Err(err).Msg("Client exited with error")
+		log.Err(err).AnErr("ctx_err", ctx.Err()).Msg("Client exited with error")
 		t.sendBadCredentialsOrUnknownError(err)
 	} else if !t.expectDisconnect.Load() {
-		log.Warn().Msg("Client exited unexpectedly")
+		log.Warn().AnErr("ctx_err", ctx.Err()).Msg("Client exited unexpectedly")
 		t.sendBadCredentialsOrUnknownError(fmt.Errorf("unexpectedly disconnected from Telegram"))
 	} else {
-		log.Debug().Msg("Client exited without error")
+		log.Debug().AnErr("ctx_err", ctx.Err()).Msg("Client exited without error")
 	}
 }
 

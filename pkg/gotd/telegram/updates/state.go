@@ -167,16 +167,16 @@ func (s *internalState) Run(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return fmt.Errorf("parent context cancelled: %w", ctx.Err())
 		case u := <-s.externalQueue:
 			ctx := trace.ContextWithSpanContext(ctx, u.span)
 			if err := s.handleUpdates(ctx, u.update); err != nil {
-				return err
+				return fmt.Errorf("handleUpdates for external queue failed: %w", err)
 			}
 		case u := <-s.internalQueue:
 			ctx := trace.ContextWithSpanContext(ctx, u.span)
 			if err := s.handleUpdates(ctx, u.update); err != nil {
-				return err
+				return fmt.Errorf("handleUpdates for internal queue failed: %w", err)
 			}
 		case <-s.pts.gapTimeout.C:
 			s.log.Debug("Pts gap timeout")
@@ -260,7 +260,11 @@ func (s *internalState) handleUpdates(ctx context.Context, u tg.UpdatesClass) er
 	case *tg.UpdateShortSentMessage:
 		return s.handleUpdates(ctx, s.convertShortSentMessage(u))
 	case *tg.UpdatesTooLong:
-		return s.getDifference(ctx)
+		err := s.getDifference(ctx)
+		if err != nil {
+			return fmt.Errorf("getDifference failed in handleUpdates: %w", err)
+		}
+		return nil
 	default:
 		panic(fmt.Sprintf("unexpected update type: %T", u))
 	}
@@ -279,21 +283,29 @@ func (s *internalState) handleSeq(ctx context.Context, u *tg.UpdatesCombined) er
 	if u.Seq == 0 {
 		ptsChanged, err := s.applyCombined(ctx, u)
 		if err != nil {
-			return err
+			return fmt.Errorf("applyCombined failed in handleSeq: %w", err)
 		}
 
 		if ptsChanged {
-			return s.getDifference(ctx)
+			err = s.getDifference(ctx)
+			if err != nil {
+				return fmt.Errorf("getDifference after applyCombined failed: %w", err)
+			}
+			return nil
 		}
 
 		return nil
 	}
 
-	return s.seq.Handle(ctx, update{
+	err := s.seq.Handle(ctx, update{
 		Value: u,
 		State: u.Seq,
 		Count: u.Seq - u.SeqStart + 1,
 	})
+	if err != nil {
+		return fmt.Errorf("handleSeq failed: %w", err)
+	}
+	return nil
 }
 
 func (s *internalState) handlePts(ctx context.Context, pts, ptsCount int, u tg.UpdateClass, ents entities) error {

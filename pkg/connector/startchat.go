@@ -229,6 +229,8 @@ func (t *TelegramClient) GetContactList(ctx context.Context) (resp []*bridgev2.R
 			return nil, err
 		}
 		t.lastContactReq = time.Now()
+	} else {
+		contacts = t.cachedContacts
 	}
 	users := map[int64]tg.UserClass{}
 	for _, user := range contacts.GetUsers() {

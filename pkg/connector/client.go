@@ -432,7 +432,7 @@ func (t *TelegramClient) onPing() {
 
 	me, err := t.client.Self(ctx)
 	if auth.IsUnauthorized(err) {
-		t.onAuthError(fmt.Errorf("not logged in"))
+		t.onAuthError(err)
 	} else if errors.Is(err, syscall.EPIPE) {
 		// This is a pipe error, try disconnecting which will force the
 		// updatesManager to fail and cause the client to reconnect.
@@ -510,6 +510,7 @@ func (t *TelegramClient) onAuthError(err error) {
 	t.sendBadCredentialsOrUnknownError(err)
 	t.metadata.ResetOnLogout()
 	go func() {
+		t.Disconnect()
 		if err := t.userLogin.Save(context.Background()); err != nil {
 			t.main.Bridge.Log.Err(err).Msg("failed to save user login")
 		}

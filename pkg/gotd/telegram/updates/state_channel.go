@@ -98,7 +98,7 @@ func (s *channelState) Push(ctx context.Context, u channelUpdate) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-s.runCtx.Done():
-		return s.runCtx.Err()
+		return nil
 	case s.updates <- u:
 		return nil
 	}

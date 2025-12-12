@@ -226,6 +226,7 @@ func NewTelegramClient(ctx context.Context, tc *TelegramConnector, login *bridge
 	dispatcher.OnPhoneCall(client.onPhoneCall)
 
 	client.updatesManager = updates.New(updates.Config{
+		OnNotChannelMember: client.onNotChannelMember,
 		OnChannelTooLong: func(channelID int64) error {
 			// TODO resync topics?
 			res := tc.Bridge.QueueRemoteEvent(login, &simplevent.ChatResync{

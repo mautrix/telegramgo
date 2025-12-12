@@ -205,12 +205,12 @@ func (s *channelState) applyPts(ctx context.Context, state int, updates []update
 		Users:   ents.Users,
 		Chats:   ents.Chats,
 	}); err != nil {
-		s.log.Error("Handle update error", zap.Error(err))
+		s.log.Error("Handle update error (applyPts)", zap.Error(err))
 		return nil
 	}
 
 	if err := s.storage.SetChannelPts(ctx, s.selfID, s.channelID, state); err != nil {
-		s.log.Error("SetChannelPts error", zap.Error(err))
+		s.log.Error("SetChannelPts error (applyPts)", zap.Error(err))
 	}
 
 	return nil
@@ -297,7 +297,7 @@ func (s *channelState) getDifference(ctx context.Context) error {
 		}
 
 		if err := s.storage.SetChannelPts(ctx, s.selfID, s.channelID, diff.Pts); err != nil {
-			s.log.Warn("SetChannelPts error", zap.Error(err))
+			s.log.Warn("SetChannelPts error (getDifference)", zap.Error(err))
 		}
 
 		s.pts.SetState(diff.Pts, "updates.channelDifference")
@@ -313,7 +313,7 @@ func (s *channelState) getDifference(ctx context.Context) error {
 
 	case *tg.UpdatesChannelDifferenceEmpty:
 		if err := s.storage.SetChannelPts(ctx, s.selfID, s.channelID, diff.Pts); err != nil {
-			s.log.Warn("SetChannelPts error", zap.Error(err))
+			s.log.Warn("SetChannelPts error (getDifference empty)", zap.Error(err))
 		}
 
 		s.pts.SetState(diff.Pts, "updates.channelDifferenceEmpty")
@@ -333,7 +333,7 @@ func (s *channelState) getDifference(ctx context.Context) error {
 			s.log.Warn("UpdatesChannelDifferenceTooLong invalid Dialog", zap.Error(err))
 		} else {
 			if err := s.storage.SetChannelPts(ctx, s.selfID, s.channelID, remotePts); err != nil {
-				s.log.Warn("SetChannelPts error", zap.Error(err))
+				s.log.Warn("SetChannelPts error (getDifference too long)", zap.Error(err))
 			}
 
 			s.pts.SetState(remotePts, "updates.channelDifferenceTooLong dialog new pts")

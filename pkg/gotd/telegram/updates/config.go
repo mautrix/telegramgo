@@ -16,6 +16,7 @@ type API interface {
 	UpdatesGetState(ctx context.Context) (*tg.UpdatesState, error)
 	UpdatesGetDifference(ctx context.Context, request *tg.UpdatesGetDifferenceRequest) (tg.UpdatesDifferenceClass, error)
 	UpdatesGetChannelDifference(ctx context.Context, request *tg.UpdatesGetChannelDifferenceRequest) (tg.UpdatesChannelDifferenceClass, error)
+	ChannelsGetParticipant(ctx context.Context, request *tg.ChannelsGetParticipantRequest) (*tg.ChannelsChannelParticipant, error)
 }
 
 // Config of the manager.
@@ -24,7 +25,8 @@ type Config struct {
 	Handler telegram.UpdateHandler
 	// Callback called if manager cannot
 	// recover channel gap (optional).
-	OnChannelTooLong func(channelID int64) error
+	OnChannelTooLong   func(channelID int64) error
+	OnNotChannelMember func(ctx context.Context, channelID int64) error
 	// State storage.
 	// In-mem used if not provided.
 	Storage StateStorage

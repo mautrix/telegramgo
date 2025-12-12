@@ -62,11 +62,8 @@ type internalState struct {
 }
 
 type stateConfig struct {
-	State    State
-	Channels map[int64]struct {
-		Pts        int
-		AccessHash int64
-	}
+	State            State
+	Channels         map[int64]PtsAccessHashTuple
 	RawClient        API
 	Logger           *zap.Logger
 	Tracer           trace.Tracer
@@ -421,6 +418,10 @@ func (s *internalState) createAndRunChannelState(ctx context.Context, channelID,
 			delete(s.channels, channelID)
 			s.channelsLock.Unlock()
 			s.log.Info("Removed channel state due to error", zap.Int64("channel_id", channelID), zap.Error(err))
+			return nil
+		} else if ctx.Err() == nil {
+			s.log.Error("Channel state stopped with unexpected error, new messages may stop arriving",
+				zap.Int64("channel_id", channelID), zap.Error(err))
 			return nil
 		}
 		return err

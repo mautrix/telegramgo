@@ -107,6 +107,10 @@ func (t *TelegramClient) selfLeaveChat(ctx context.Context, portalKey networkid.
 	return nil
 }
 
+func (t *TelegramClient) onNotChannelMember(ctx context.Context, channelID int64) error {
+	return t.selfLeaveChat(ctx, t.makePortalKeyFromID(ids.PeerTypeChannel, channelID, 0), fmt.Errorf("startup channel member check failed"))
+}
+
 func (t *TelegramClient) onUpdateChannel(ctx context.Context, e tg.Entities, update *tg.UpdateChannel) error {
 	log := zerolog.Ctx(ctx).With().
 		Str("handler", "on_update_channel").

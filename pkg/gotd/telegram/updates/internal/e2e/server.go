@@ -34,6 +34,12 @@ func newServer() *server {
 	}
 }
 
+func (s *server) ChannelsGetParticipant(ctx context.Context, request *tg.ChannelsGetParticipantRequest) (*tg.ChannelsChannelParticipant, error) {
+	return &tg.ChannelsChannelParticipant{
+		Participant: &tg.ChannelParticipantSelf{},
+	}, nil
+}
+
 // UpdatesGetState returns current remote state.
 func (s *server) UpdatesGetState(ctx context.Context) (*tg.UpdatesState, error) {
 	s.mux.Lock()

@@ -74,19 +74,26 @@ const (
 
 var _ updates.StateStorage = (*ScopedStore)(nil)
 
+type channelIDPtsTuple struct {
+	ChannelID int64
+	Pts       int
+}
+
+var ciptScanner = dbutil.ConvertRowFn[channelIDPtsTuple](func(row dbutil.Scannable) (cipt channelIDPtsTuple, err error) {
+	err = row.Scan(&cipt.ChannelID, &cipt.Pts)
+	return
+})
+
 func (s *ScopedStore) ForEachChannels(ctx context.Context, userID int64, f func(ctx context.Context, channelID int64, pts int) error) error {
 	s.assertUserIDMatches(userID)
-	rows, err := s.db.Query(ctx, allChannelsQuery, userID)
+	items, err := ciptScanner.NewRowIter(s.db.Query(ctx, allChannelsQuery, userID)).AsList()
 	if err != nil {
 		return err
 	}
-	var channelID int64
-	var pts int
-	for rows.Next() {
-		if err = rows.Scan(&channelID, &pts); err != nil {
-			return err
-		} else if err = f(ctx, channelID, pts); err != nil {
-			return err
+	for _, item := range items {
+		err = f(ctx, item.ChannelID, item.Pts)
+		if err != nil {
+			return fmt.Errorf("iteration error for channel %d: %w", item.ChannelID, err)
 		}
 	}
 	return nil

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-faster/errors"
+	"go.mau.fi/util/exsync"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -45,8 +46,9 @@ type internalState struct {
 	idleTimeout   *time.Timer
 
 	// Channel states.
-	channels     map[int64]*channelState
-	channelsLock sync.Mutex
+	channels             map[int64]*channelState
+	channelsLock         sync.Mutex
+	recentlyLeftChannels *exsync.Set[int64]
 
 	// Immutable fields.
 	client    API
@@ -84,7 +86,8 @@ func newState(ctx context.Context, cfg stateConfig) *internalState {
 		date:        cfg.State.Date,
 		idleTimeout: time.NewTimer(idleTimeout),
 
-		channels: make(map[int64]*channelState),
+		channels:             make(map[int64]*channelState),
+		recentlyLeftChannels: exsync.NewSet[int64](),
 
 		client:    cfg.RawClient,
 		log:       cfg.Logger,
@@ -341,20 +344,27 @@ func (s *internalState) handleChannel(ctx context.Context, channelID int64, date
 		s.log.Error("Pts validation failed", zap.Error(err), zap.Any("update", cu.update))
 		return nil
 	}
+	found := false
 	for _, ent := range cu.entities.Chats {
 		if ent.GetID() == channelID {
+			found = true
 			switch te := ent.(type) {
 			case *tg.Channel:
 				if te.Left {
 					s.log.Info("Not adding new channel state for left channel", zap.Int64("channel_id", channelID))
 					return nil
 				}
+				s.recentlyLeftChannels.Remove(channelID)
 			case *tg.ChannelForbidden:
 				s.log.Info("Not adding new channel state for forbidden channel", zap.Int64("channel_id", channelID))
 				return nil
 			}
 			break
 		}
+	}
+	if !found && s.recentlyLeftChannels.Has(channelID) {
+		s.log.Info("Not adding new channel state for recently left channel", zap.Int64("channel_id", channelID))
+		return nil
 	}
 
 	s.channelsLock.Lock()

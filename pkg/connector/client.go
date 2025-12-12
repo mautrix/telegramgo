@@ -83,6 +83,7 @@ type TelegramClient struct {
 	clientCancel      context.CancelFunc
 	clientDone        *exsync.Event
 	clientInitialized *exsync.Event
+	expectDisconnect  atomic.Bool
 	mu                sync.Mutex
 
 	appConfigLock sync.Mutex
@@ -534,6 +535,7 @@ func (t *TelegramClient) Connect(ctx context.Context) {
 	t.clientCancel = cancel
 	t.clientDone.Clear()
 	t.clientInitialized.Clear()
+	t.expectDisconnect.Store(false)
 	go t.runInBackground(ctx)
 }
 
@@ -557,6 +559,9 @@ func (t *TelegramClient) runInBackground(ctx context.Context) {
 	if err != nil {
 		log.Err(err).Msg("Client exited with error")
 		t.sendBadCredentialsOrUnknownError(err)
+	} else if !t.expectDisconnect.Load() {
+		log.Warn().Msg("Client exited unexpectedly")
+		t.sendBadCredentialsOrUnknownError(fmt.Errorf("unexpectedly disconnected from Telegram"))
 	} else {
 		log.Debug().Msg("Client exited without error")
 	}
@@ -567,6 +572,7 @@ func (t *TelegramClient) Disconnect() {
 	defer t.mu.Unlock()
 
 	t.userLogin.Log.Debug().Msg("Disconnecting client")
+	t.expectDisconnect.Store(true)
 
 	if t.clientCancel != nil {
 		t.clientCancel()

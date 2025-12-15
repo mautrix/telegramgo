@@ -25,9 +25,8 @@ import (
 func (m Mention) Format(message string) string {
 	if m.Username != "" {
 		return fmt.Sprintf(`<a href="%s">@%s</a>`, m.MXID.URI().MatrixToURL(), m.Username)
-	} else {
-		return fmt.Sprintf(`<a href="%s">%s</a>`, m.MXID.URI().MatrixToURL(), m.Name)
 	}
+	return fmt.Sprintf(`<a href="%s">%s</a>`, m.MXID.URI().MatrixToURL(), m.Name)
 }
 
 func (s Style) Format(message string) string {
@@ -52,22 +51,15 @@ func (s Style) Format(message string) string {
 		return fmt.Sprintf("<blockquote>%s</blockquote>", message)
 	case StylePre:
 		if s.Language != "" {
-			return fmt.Sprintf("<pre><code class='language-%s'>%s</code></pre>", s.Language, message)
-		} else {
-			return fmt.Sprintf("<pre><code>%s</code></pre>", message)
+			return fmt.Sprintf(`<pre><code class="language-%s">%s</code></pre>`, s.Language, message)
 		}
+		return fmt.Sprintf("<pre><code>%s</code></pre>", message)
 	case StyleEmail:
-		return fmt.Sprintf(`<a href='mailto:%s'>%s</a>`, message, message)
+		return fmt.Sprintf(`<a href="mailto:%s">%s</a>`, message, message)
 	case StyleTextURL:
-		if strings.HasPrefix(s.URL, "https://matrix.to/#") {
-			return s.URL
-		}
-		return fmt.Sprintf(`<a href='%s'>%s</a>`, s.URL, message)
+		return fmt.Sprintf(`<a href="%s">%s</a>`, s.URL, message)
 	case StyleURL:
-		if strings.HasPrefix(s.URL, "https://matrix.to/#") {
-			return s.URL
-		}
-		return fmt.Sprintf(`<a href='%s'>%s</a>`, s.URL, message)
+		return fmt.Sprintf(`<a href="%s">%s</a>`, s.URL, message)
 	case StyleCustomEmoji:
 		if s.EmojiInfo.Emoji != "" {
 			return s.EmojiInfo.Emoji
@@ -76,17 +68,10 @@ func (s Style) Format(message string) string {
 				`<img data-mx-emoticon data-mau-animated-emoji src="%s" height="32" width="32" alt="%s" title="%s"/>`,
 				s.EmojiInfo.EmojiURI, message, message,
 			)
-		} else {
-			return message
 		}
-	case StyleBotCommand:
-		return fmt.Sprintf("<font color='#3771bb'>%s</font>", message)
-	case StyleHashtag:
-		return fmt.Sprintf("<font color='#3771bb'>%s</font>", message)
-	case StyleCashtag:
-		return fmt.Sprintf("<font color='#3771bb'>%s</font>", message)
-	case StylePhone:
-		return fmt.Sprintf("<font color='#3771bb'>%s</font>", message)
+		return message
+	case StyleBotCommand, StyleHashtag, StyleCashtag, StylePhone:
+		return fmt.Sprintf(`<font color="#3771bb">%s</font>`, message)
 	default:
 		return message
 	}

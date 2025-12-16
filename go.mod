@@ -41,7 +41,7 @@ require (
 	golang.org/x/sync v0.19.0
 	golang.org/x/tools v0.40.0
 	gopkg.in/yaml.v3 v3.0.1
-	maunium.net/go/mautrix v0.26.2-0.20251216145954-e38d758a525a
+	maunium.net/go/mautrix v0.26.2-0.20251216165739-b44f81d114ca
 	rsc.io/qr v0.2.0
 )
 

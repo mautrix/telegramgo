@@ -56,9 +56,7 @@ func (s Style) Format(message string) string {
 		return fmt.Sprintf("<pre><code>%s</code></pre>", message)
 	case StyleEmail:
 		return fmt.Sprintf(`<a href="mailto:%s">%s</a>`, message, message)
-	case StyleTextURL:
-		return fmt.Sprintf(`<a href="%s">%s</a>`, s.URL, message)
-	case StyleURL:
+	case StyleTextURL, StyleURL:
 		return fmt.Sprintf(`<a href="%s">%s</a>`, s.URL, message)
 	case StyleCustomEmoji:
 		if s.EmojiInfo.Emoji != "" {

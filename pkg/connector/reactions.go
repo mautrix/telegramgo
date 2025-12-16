@@ -42,7 +42,7 @@ func (t *TelegramClient) computeReactionsList(ctx context.Context, peer tg.PeerC
 	reactionsList := msgReactions.RecentReactions
 	if totalCount > 0 && len(reactionsList) == 0 && !msgReactions.CanSeeList {
 		// We don't know who reacted in a channel, so we can't bridge it properly either
-		log.Warn().Msg("Can't see reaction list in channel")
+		log.Trace().Msg("Can't see reaction list in channel")
 		return
 	}
 

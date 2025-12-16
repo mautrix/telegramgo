@@ -86,9 +86,10 @@ func Parse(ctx context.Context, message string, entities []tg.MessageEntityClass
 		switch entity := e.(type) {
 		case *tg.MessageEntityMention:
 			username := utf16Message[e.GetOffset()+1 : e.GetOffset()+e.GetLength()].String()
+			// TODO support channel links (link to room if exists)
 			userInfo, err := params.GetUserInfoByUsername(ctx, username)
 			if err != nil {
-				log.Warn().Err(err).Str("username", username).Msg("Failed to get user info for mention")
+				log.Debug().Err(err).Str("username", username).Msg("Failed to get user info for mention")
 				continue // Skip this mention
 			}
 			mentions[userInfo.MXID] = struct{}{}

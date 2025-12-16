@@ -114,7 +114,7 @@ func (c *Conn) trackInvoke() func(bin.Encoder, bin.Decoder, *error) {
 		c.latest = end
 
 		var respField zap.Field
-		if retErr != nil {
+		if *retErr != nil {
 			respField = zap.Error(*retErr)
 		} else {
 			respField = zap.Any("response_payload", output)

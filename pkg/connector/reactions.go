@@ -120,7 +120,9 @@ func (t *TelegramClient) handleTelegramReactions(ctx context.Context, msg *tg.Me
 	for _, reaction := range reactionsList {
 		peer, ok := reaction.PeerID.(*tg.PeerUser)
 		if !ok {
-			return fmt.Errorf("unknown peer type: %T", reaction.PeerID)
+			// TODO handle channel peers
+			log.Debug().Type("peer_type", reaction.PeerID).Msg("Ignoring reaction from non-user peer")
+			continue
 		}
 		userID := ids.MakeUserID(peer.UserID)
 		reactionLimit, err := t.getReactionLimit(ctx, userID)

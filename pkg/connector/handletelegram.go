@@ -47,7 +47,6 @@ import (
 
 type IGetMessage interface {
 	GetMessage() tg.MessageClass
-	String() string
 }
 
 type IGetMessages interface {
@@ -170,7 +169,6 @@ func (t *TelegramClient) onUpdateChannel(ctx context.Context, e tg.Entities, upd
 
 func (t *TelegramClient) onUpdateNewMessage(ctx context.Context, entities tg.Entities, update IGetMessage) error {
 	log := *zerolog.Ctx(ctx)
-	log.Trace().Stringer("message_content", update).Msg("Raw message content")
 	switch msg := update.GetMessage().(type) {
 	case *tg.Message:
 		var isBroadcastChannel bool
@@ -821,19 +819,23 @@ func (t *TelegramClient) updateChannel(ctx context.Context, channel *tg.Channel)
 	return userInfo, nil
 }
 
-func (t *TelegramClient) onEntityUpdate(ctx context.Context, e tg.Entities, _ tg.UpdateClass) error {
+func (t *TelegramClient) onEntityUpdate(ctx context.Context, e tg.Entities, upd tg.UpdateClass) error {
+	zerolog.Ctx(ctx).Trace().Stringer("update", upd).Msg("Raw update")
 	for userID, user := range e.Users {
+		zerolog.Ctx(ctx).Trace().Stringer("user", user).Msg("Raw user info in update")
 		if _, err := t.updateGhost(ctx, userID, user); err != nil {
 			return err
 		}
 	}
 	for chatID, chat := range e.Chats {
+		zerolog.Ctx(ctx).Trace().Stringer("chat", chat).Msg("Raw chat info in update")
 		if chat.GetLeft() {
 			// TODO don't ignore errors
 			t.selfLeaveChat(ctx, t.makePortalKeyFromID(ids.PeerTypeChat, chatID, 0), fmt.Errorf("left flag in entity update"))
 		}
 	}
 	for _, channel := range e.Channels {
+		zerolog.Ctx(ctx).Trace().Stringer("channel", channel).Msg("Raw channel info in update")
 		if channel.GetLeft() {
 			t.selfLeaveChat(ctx, t.makePortalKeyFromID(ids.PeerTypeChannel, channel.ID, 0), fmt.Errorf("left flag in entity update"))
 		} else if _, err := t.updateChannel(ctx, channel); err != nil {
@@ -844,7 +846,6 @@ func (t *TelegramClient) onEntityUpdate(ctx context.Context, e tg.Entities, _ tg
 }
 
 func (t *TelegramClient) onMessageEdit(ctx context.Context, update IGetMessage) error {
-	zerolog.Ctx(ctx).Trace().Stringer("message_content", update).Msg("Raw message edit content")
 	msg, ok := update.GetMessage().(*tg.Message)
 	if !ok {
 		zerolog.Ctx(ctx).Warn().

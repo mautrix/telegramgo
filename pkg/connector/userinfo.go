@@ -36,6 +36,27 @@ func (t *TelegramClient) GetUserInfo(ctx context.Context, ghost *bridgev2.Ghost)
 	}
 }
 
+func (t *TelegramClient) getInputUser(ctx context.Context, id int64) (*tg.InputUser, error) {
+	accessHash, err := t.ScopedStore.GetAccessHash(ctx, ids.PeerTypeUser, id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get access hash for user %d: %w", id, err)
+	}
+	return &tg.InputUser{UserID: id, AccessHash: accessHash}, nil
+}
+
+func (t *TelegramClient) getSingleUser(ctx context.Context, id int64) (tg.UserClass, error) {
+	if inputUser, err := t.getInputUser(ctx, id); err != nil {
+		return nil, err
+	} else if users, err := t.client.API().UsersGetUsers(ctx, []tg.InputUserClass{inputUser}); err != nil {
+		return nil, err
+	} else if len(users) == 0 {
+		// TODO does this mean the user is deleted? Need to handle this a bit better
+		return nil, fmt.Errorf("failed to get user info for user %d", id)
+	} else {
+		return users[0], nil
+	}
+}
+
 func (t *TelegramClient) wrapChannelGhostInfo(ctx context.Context, channel *tg.Channel) (*bridgev2.UserInfo, error) {
 	var err error
 	if accessHash, ok := channel.GetAccessHash(); ok && !channel.Min {

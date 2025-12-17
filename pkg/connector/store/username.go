@@ -40,8 +40,9 @@ const (
 			entity_type=excluded.entity_type,
 			entity_id=excluded.entity_id
 	`
-	getByUsernameQuery = "SELECT entity_type, entity_id FROM telegram_username WHERE LOWER(username)=$1"
-	clearUsernameQuery = `DELETE FROM telegram_username WHERE entity_type=$1 AND entity_id=$2`
+	getByUsernameQuery  = "SELECT entity_type, entity_id FROM telegram_username WHERE LOWER(username)=$1"
+	clearUsernameQuery  = `DELETE FROM telegram_username WHERE entity_type=$1 AND entity_id=$2`
+	deleteUsernameQuery = `DELETE FROM telegram_username WHERE LOWER(username)=$1`
 )
 
 func (s *UsernameQuery) Get(ctx context.Context, entityType ids.PeerType, userID int64) (username string, err error) {
@@ -58,6 +59,11 @@ func (s *UsernameQuery) Set(ctx context.Context, entityType ids.PeerType, entity
 	} else {
 		_, err = s.db.Exec(ctx, setUsernameQuery, username, entityType, entityID)
 	}
+	return
+}
+
+func (s *UsernameQuery) Delete(ctx context.Context, username string) (err error) {
+	_, err = s.db.Exec(ctx, deleteUsernameQuery, strings.ToLower(username))
 	return
 }
 

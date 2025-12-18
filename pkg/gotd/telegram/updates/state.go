@@ -168,31 +168,35 @@ func (s *internalState) Run(ctx context.Context) error {
 	s.getDifferenceLogger(ctx)
 
 	for {
+		var err error
 		select {
 		case <-ctx.Done():
 			return fmt.Errorf("parent context cancelled: %w", ctx.Err())
 		case u := <-s.externalQueue:
 			ctx := trace.ContextWithSpanContext(ctx, u.span)
-			if err := s.handleUpdates(ctx, u.update); err != nil {
+			if err = s.handleUpdates(ctx, u.update); err != nil {
 				return fmt.Errorf("handleUpdates for external queue failed: %w", err)
 			}
 		case u := <-s.internalQueue:
 			ctx := trace.ContextWithSpanContext(ctx, u.span)
-			if err := s.handleUpdates(ctx, u.update); err != nil {
+			if err = s.handleUpdates(ctx, u.update); err != nil {
 				return fmt.Errorf("handleUpdates for internal queue failed: %w", err)
 			}
 		case <-s.pts.gapTimeout.C:
 			s.log.Debug("Pts gap timeout")
-			s.getDifferenceLogger(ctx)
+			err = s.getDifferenceLogger(ctx)
 		case <-s.qts.gapTimeout.C:
 			s.log.Debug("Qts gap timeout")
-			s.getDifferenceLogger(ctx)
+			err = s.getDifferenceLogger(ctx)
 		case <-s.seq.gapTimeout.C:
 			s.log.Debug("Seq gap timeout")
-			s.getDifferenceLogger(ctx)
+			err = s.getDifferenceLogger(ctx)
 		case <-s.idleTimeout.C:
 			s.log.Debug("Idle timeout")
-			s.getDifferenceLogger(ctx)
+			err = s.getDifferenceLogger(ctx)
+		}
+		if err != nil {
+			return fmt.Errorf("fatal error from timeout getDifference: %w", err)
 		}
 	}
 }
@@ -602,10 +606,14 @@ func (s *internalState) getDifference(ctx context.Context) error {
 	}
 }
 
-func (s *internalState) getDifferenceLogger(ctx context.Context) {
+func (s *internalState) getDifferenceLogger(ctx context.Context) error {
 	if err := s.getDifference(ctx); err != nil {
+		if isFatalError(err) {
+			return err
+		}
 		s.log.Error("get difference error", zap.Error(err))
 	}
+	return nil
 }
 
 func (s *internalState) resetIdleTimer() {

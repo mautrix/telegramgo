@@ -489,11 +489,33 @@ func (s *internalState) getDifference(ctx context.Context) error {
 		s.date = state.Date
 	}
 
-	diff, err := s.client.UpdatesGetDifference(ctx, &tg.UpdatesGetDifferenceRequest{
-		Pts:  s.pts.State(),
-		Qts:  s.qts.State(),
-		Date: s.date,
-	})
+	var diff tg.UpdatesDifferenceClass
+	var err error
+	for {
+		diff, err = s.client.UpdatesGetDifference(ctx, &tg.UpdatesGetDifferenceRequest{
+			Pts:  s.pts.State(),
+			Qts:  s.qts.State(),
+			Date: s.date,
+		})
+		if isFatalError(err) {
+			return err
+		} else if err != nil {
+			dur, ok := tgerr.AsFloodWait(err)
+			if ok {
+				s.log.Warn("Flood wait error while getting difference", zap.Duration("wait", dur))
+			} else {
+				s.log.Error("Failed to get difference, retrying in 5 seconds...", zap.Error(err))
+				dur = 5 * time.Second
+			}
+			select {
+			case <-time.After(dur):
+			case <-ctx.Done():
+				return fmt.Errorf("context canceled while waiting to retry: %w", ctx.Err())
+			}
+		} else {
+			break
+		}
+	}
 	if err != nil {
 		return errors.Wrap(err, "get difference")
 	}

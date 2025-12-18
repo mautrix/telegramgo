@@ -45,6 +45,7 @@ func (s *internalState) applyCombined(ctx context.Context, comb *tg.UpdatesCombi
 	)
 	sortUpdatesByPts(comb.Updates)
 
+	nonChannelUpdates := comb.Updates[:0]
 	for _, u := range comb.Updates {
 		switch u := u.(type) {
 		case *tg.UpdatePtsChanged:
@@ -86,6 +87,8 @@ func (s *internalState) applyCombined(ctx context.Context, comb *tg.UpdatesCombi
 			}); err != nil {
 				return false, err
 			}
+		} else {
+			nonChannelUpdates = append(nonChannelUpdates, u)
 		}
 
 		if qts, ok := tg.IsQtsUpdate(u); ok {
@@ -96,7 +99,7 @@ func (s *internalState) applyCombined(ctx context.Context, comb *tg.UpdatesCombi
 	}
 
 	if err := s.handler.Handle(ctx, &tg.Updates{
-		Updates: comb.Updates,
+		Updates: nonChannelUpdates,
 		Users:   ents.Users,
 		Chats:   ents.Chats,
 	}); err != nil {

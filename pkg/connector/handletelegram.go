@@ -549,31 +549,36 @@ func (t *TelegramClient) handleServiceMessage(ctx context.Context, msg *tg.Messa
 		log.Debug().
 			Str("old_portal_id", string(eventMeta.PortalKey.ID)).
 			Int64("channel_id", action.ChannelID).
-			Msg("MessageActionChatMigrateTo")
-		newPortalKey := t.makePortalKeyFromID(ids.PeerTypeChannel, action.ChannelID, 0)
-		if err := t.migrateChat(ctx, eventMeta.PortalKey, newPortalKey); err != nil {
-			log.Err(err).Msg("Failed to migrate chat to channel")
-			return err
-		}
-		res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.Message[any]{
-			EventMeta: eventMeta.
-				WithPortalKey(newPortalKey).
-				WithStreamOrder(0).
-				WithType(bridgev2.RemoteEventMessage),
-			ID: ids.GetMessageIDFromMessage(msg),
-			ConvertMessageFunc: func(ctx context.Context, portal *bridgev2.Portal, intent bridgev2.MatrixAPI, data any) (*bridgev2.ConvertedMessage, error) {
-				return &bridgev2.ConvertedMessage{
-					Parts: []*bridgev2.ConvertedMessagePart{{
-						Type: event.EventMessage,
-						Content: &event.MessageEventContent{
-							MsgType: event.MsgNotice,
-							Body:    "Upgraded this group to a supergroup",
-						},
-					}},
-				}, nil
-			},
-		})
-		return resultToError(res)
+			Msg("Received chat migrate action message")
+		// TODO this shouldn't really be in a goroutine, but it seems like there's a deadlock somewhere
+		//      if there's a CreateMatrixRoom call ongoing at the same time as migrateChat
+		//      (guessing it's actually the GetChatInfo call that's getting stuck, but not sure)
+		go func() {
+			newPortalKey := t.makePortalKeyFromID(ids.PeerTypeChannel, action.ChannelID, 0)
+			if err := t.migrateChat(ctx, eventMeta.PortalKey, newPortalKey); err != nil {
+				log.Err(err).Msg("Failed to migrate chat to channel")
+				return
+			}
+			t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.Message[any]{
+				EventMeta: eventMeta.
+					WithPortalKey(newPortalKey).
+					WithStreamOrder(0).
+					WithType(bridgev2.RemoteEventMessage),
+				ID: ids.GetMessageIDFromMessage(msg),
+				ConvertMessageFunc: func(ctx context.Context, portal *bridgev2.Portal, intent bridgev2.MatrixAPI, data any) (*bridgev2.ConvertedMessage, error) {
+					return &bridgev2.ConvertedMessage{
+						Parts: []*bridgev2.ConvertedMessagePart{{
+							Type: event.EventMessage,
+							Content: &event.MessageEventContent{
+								MsgType: event.MsgNotice,
+								Body:    "Upgraded this group to a supergroup",
+							},
+						}},
+					}, nil
+				},
+			})
+		}()
+		return nil
 
 	case *tg.MessageActionTopicCreate:
 		channelPeer, _ := msg.PeerID.(*tg.PeerChannel)
@@ -784,6 +789,7 @@ func (t *TelegramClient) updateChannel(ctx context.Context, channel *tg.Channel)
 	}
 
 	// TODO resync portal metadata?
+	// (actually don't, that might cause deadlocks if done while the portal is fetching its own info for creation)
 
 	if !channel.Broadcast {
 		return nil, nil

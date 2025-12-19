@@ -274,7 +274,8 @@ func (t *TelegramClient) handleServiceMessage(ctx context.Context, msg *tg.Messa
 				Str("sender", string(sender.Sender)).
 				Str("sender_login", string(sender.SenderLogin)).
 				Bool("is_from_me", sender.IsFromMe).
-				Stringer("peer_id", msg.PeerID)
+				Stringer("peer_id", msg.PeerID).
+				Type("action_message_type", msg.Action)
 		},
 		StreamOrder: int64(msg.GetID()),
 	}
@@ -545,7 +546,10 @@ func (t *TelegramClient) handleServiceMessage(ctx context.Context, msg *tg.Messa
 		return resultToError(res)
 
 	case *tg.MessageActionChatMigrateTo:
-		log.Debug().Int64("channel_id", action.ChannelID).Msg("MessageActionChatMigrateTo")
+		log.Debug().
+			Str("old_portal_id", string(eventMeta.PortalKey.ID)).
+			Int64("channel_id", action.ChannelID).
+			Msg("MessageActionChatMigrateTo")
 		newPortalKey := t.makePortalKeyFromID(ids.PeerTypeChannel, action.ChannelID, 0)
 		if err := t.migrateChat(ctx, eventMeta.PortalKey, newPortalKey); err != nil {
 			log.Err(err).Msg("Failed to migrate chat to channel")

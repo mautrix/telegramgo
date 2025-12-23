@@ -632,9 +632,26 @@ func (t *TelegramClient) migrateChat(ctx context.Context, oldPortalKey, newPorta
 		// If the source is deleted, then it doesn't matter, any existing target will already be correct
 		info, err := t.GetChatInfo(ctx, portal)
 		if err != nil {
-			return fmt.Errorf("failed to get chat info for new portal: %w", err)
+			zerolog.Ctx(ctx).Err(err).Msg("Failed to get chat info after re-ID")
+			if tgerr.Is(err, tg.ErrChannelPrivate) {
+				go func() {
+					select {
+					case <-time.After(5 * time.Second):
+					case <-ctx.Done():
+						return
+					}
+					zerolog.Ctx(ctx).Debug().Msg("Retrying GetChatInfo after re-ID")
+					info, err := t.GetChatInfo(ctx, portal)
+					if err != nil {
+						zerolog.Ctx(ctx).Err(err).Msg("Failed to get chat info after re-ID retry")
+					} else {
+						portal.UpdateInfo(ctx, info, t.userLogin, nil, time.Time{})
+					}
+				}()
+			}
+		} else {
+			portal.UpdateInfo(ctx, info, t.userLogin, nil, time.Time{})
 		}
-		portal.UpdateInfo(ctx, info, t.userLogin, nil, time.Time{})
 	}
 	return nil
 }

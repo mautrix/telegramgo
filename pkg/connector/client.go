@@ -104,6 +104,8 @@ type TelegramClient struct {
 	contactsLock       sync.Mutex
 	lastContactReq     time.Time
 
+	dcTransferLock sync.Mutex
+
 	takeoutLock        sync.Mutex
 	takeoutAccepted    *exsync.Event
 	stopTakeoutTimer   *time.Timer
@@ -256,6 +258,7 @@ func NewTelegramClient(ctx context.Context, tc *TelegramConnector, login *bridge
 		OnDead:               client.onDead,
 		OnSession:            client.onSession,
 		OnConnected:          client.onConnected,
+		OnTransfer:           client.onTransfer,
 		PingCallback:         client.onPing,
 		OnAuthError:          client.onAuthError,
 		PingTimeout:          time.Duration(tc.Config.Ping.TimeoutSeconds) * time.Second,
@@ -499,6 +502,13 @@ func (t *TelegramClient) onConnected(self *tg.User) {
 
 	t.updateRemoteProfile(ctx, self, ghost)
 	t.userLogin.BridgeState.Send(status.BridgeState{StateEvent: status.StateConnected})
+}
+
+func (t *TelegramClient) onTransfer(ctx context.Context, _ *telegram.Client, fn func(context.Context) error) error {
+	t.userLogin.Log.Trace().Msg("Doing DC auth transfer")
+	t.dcTransferLock.Lock()
+	defer t.dcTransferLock.Unlock()
+	return fn(ctx)
 }
 
 func (t *TelegramClient) onSession() {

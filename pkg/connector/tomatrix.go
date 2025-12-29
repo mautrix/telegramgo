@@ -22,6 +22,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"html"
+	"strconv"
 	"strings"
 	"time"
 
@@ -422,12 +423,12 @@ func (c *TelegramClient) convertMediaRequiringUpload(
 					content.FileName = content.Body
 					content.Body = a.Alt
 				}
-				stickerInfo := map[string]any{"alt": a.Alt, "id": document.ID}
+				stickerInfo := map[string]any{"alt": a.Alt, "id": strconv.FormatInt(document.ID, 10)}
 
 				if setID, ok := a.Stickerset.(*tg.InputStickerSetID); ok {
 					stickerInfo["pack"] = map[string]any{
-						"id":          setID.ID,
-						"access_hash": setID.AccessHash,
+						"id":          strconv.FormatInt(setID.ID, 10),
+						"access_hash": strconv.FormatInt(setID.AccessHash, 10),
 					}
 				} else if shortName, ok := a.Stickerset.(*tg.InputStickerSetShortName); ok {
 					stickerInfo["pack"] = map[string]any{

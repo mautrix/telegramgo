@@ -116,7 +116,7 @@ func (c *Conn) trackInvoke() func(bin.Encoder, bin.Decoder, *error) {
 		var respField zap.Field
 		if *retErr != nil {
 			respField = zap.Error(*retErr)
-		} else {
+		} else if _, isFile := output.(*tg.UploadFileBox); !isFile {
 			respField = zap.Any("response_payload", output)
 		}
 

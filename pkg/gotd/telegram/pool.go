@@ -2,6 +2,7 @@ package telegram
 
 import (
 	"context"
+	"time"
 
 	"github.com/go-faster/errors"
 	"go.uber.org/zap"
@@ -12,6 +13,7 @@ import (
 	"go.mau.fi/mautrix-telegram/pkg/gotd/telegram/dcs"
 	"go.mau.fi/mautrix-telegram/pkg/gotd/telegram/internal/manager"
 	"go.mau.fi/mautrix-telegram/pkg/gotd/tg"
+	"go.mau.fi/mautrix-telegram/pkg/gotd/tgerr"
 	"go.mau.fi/mautrix-telegram/pkg/gotd/transport"
 )
 
@@ -94,7 +96,21 @@ func (c *Client) dc(ctx context.Context, dcID int, max int64, dialer mtproto.Dia
 		return nil, errors.Wrap(err, "create pool")
 	}
 
-	_, err = c.transfer(ctx, tg.NewClient(p), dcID)
+	for i := range 5 {
+		_, err = c.transfer(ctx, tg.NewClient(p), dcID)
+		// TODO why does import authorization sometimes throw AUTH_BYTES_INVALID?
+		// The calls to this should already be locked so it doesn't seem like a race
+		if err != nil && tgerr.Is(err, tg.ErrAuthBytesInvalid) {
+			c.log.Warn("Got auth bytes invalid error, retrying DC transfer", zap.Error(err), zap.Int("retry_count", i))
+			select {
+			case <-time.After(time.Duration(i*500) * time.Millisecond):
+				continue
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+		break
+	}
 	if err != nil {
 		// Ignore case then we are not authorized.
 		if auth.IsUnauthorized(err) {

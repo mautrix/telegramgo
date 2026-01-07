@@ -72,14 +72,10 @@ func (s *internalState) handleDifference(ctx context.Context, date int) (chats [
 	ctx, span := s.tracer.Start(ctx, "updates.handleDifference")
 	defer span.End()
 
-	diff, err := s.client.UpdatesGetDifference(ctx, &tg.UpdatesGetDifferenceRequest{
-		Pts:  s.pts.State(),
-		Qts:  s.qts.State(),
-		Date: date,
-	})
+	diff, err := s.getDifferenceWithRetry(ctx, date)
 	if err != nil {
 		s.log.Error("UpdatesGetDifference error", zap.Error(err))
-		return nil, nil, fmt.Errorf("get difference: %w", err)
+		return nil, nil, fmt.Errorf("get difference failed in handleDifference: %w", err)
 	}
 
 	switch diff := diff.(type) {

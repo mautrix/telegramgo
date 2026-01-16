@@ -30,9 +30,10 @@ import (
 )
 
 const (
-	LoginStepIDPhoneNumber = "fi.mau.telegram.login.phone_number"
-	LoginStepIDCode        = "fi.mau.telegram.login.code"
-	LoginStepIDPassword    = "fi.mau.telegram.login.password"
+	LoginStepIDPhoneNumber       = "fi.mau.telegram.login.phone_number"
+	LoginStepIDCode              = "fi.mau.telegram.login.code"
+	LoginStepIDPassword          = "fi.mau.telegram.login.password"
+	LoginStepIDPasswordIncorrect = "fi.mau.telegram.login.password.incorrect"
 )
 
 type PhoneLogin struct {

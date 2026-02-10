@@ -159,8 +159,22 @@ func (bl *baseLogin) makeClient(ctx context.Context, dispatcher *tg.UpdateDispat
 }
 
 var passwordLoginStep = &bridgev2.LoginStep{
-	Type:   bridgev2.LoginStepTypeUserInput,
-	StepID: LoginStepIDPassword,
+	Type:         bridgev2.LoginStepTypeUserInput,
+	StepID:       LoginStepIDPassword,
+	Instructions: "You have two-factor authentication enabled.",
+	UserInputParams: &bridgev2.LoginUserInputParams{
+		Fields: []bridgev2.LoginInputDataField{{
+			Type: bridgev2.LoginInputFieldTypePassword,
+			ID:   LoginStepIDPassword,
+			Name: "Password",
+		}},
+	},
+}
+
+var passwordIncorrectLoginStep = &bridgev2.LoginStep{
+	Type:         bridgev2.LoginStepTypeUserInput,
+	StepID:       LoginStepIDPasswordIncorrect,
+	Instructions: "Incorrect password, please try again. Use the official Telegram app to reset your password if you've forgotten it.",
 	UserInputParams: &bridgev2.LoginUserInputParams{
 		Fields: []bridgev2.LoginInputDataField{{
 			Type: bridgev2.LoginInputFieldTypePassword,
@@ -179,9 +193,7 @@ func (bl *baseLogin) submitPassword(ctx context.Context, password, loginPhone st
 	authorization, err := bl.client.Auth().Password(ctx, password)
 	if err != nil {
 		if errors.Is(err, auth.ErrPasswordInvalid) {
-			// TODO re-prompt password instead of cancelling
-			bl.Cancel()
-			return nil, ErrInvalidPassword
+			return passwordIncorrectLoginStep, nil
 		}
 		bl.Cancel()
 		return nil, fmt.Errorf("failed to submit password: %w", err)

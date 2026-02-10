@@ -112,7 +112,7 @@ func (c *Client) SignIn(ctx context.Context, phone, code, codeHash string) (*tg.
 		return nil, ErrPasswordAuthNeeded
 	}
 	if tgerr.Is(err, "PHONE_CODE_INVALID") {
-		return nil, ErrPasswordAuthNeeded
+		return nil, ErrPhoneCodeInvalid
 	}
 	if err != nil {
 		return nil, errors.Wrap(err, "sign in")

@@ -30,9 +30,11 @@ import (
 )
 
 const (
-	LoginStepIDPhoneNumber = "fi.mau.telegram.login.phone_number"
-	LoginStepIDCode        = "fi.mau.telegram.login.code"
-	LoginStepIDPassword    = "fi.mau.telegram.login.password"
+	LoginStepIDPhoneNumber       = "fi.mau.telegram.login.phone_number"
+	LoginStepIDCode              = "fi.mau.telegram.login.code"
+	LoginStepIDCodeIncorrect     = "fi.mau.telegram.login.code.incorrect"
+	LoginStepIDPassword          = "fi.mau.telegram.login.password"
+	LoginStepIDPasswordIncorrect = "fi.mau.telegram.login.password.incorrect"
 )
 
 type PhoneLogin struct {
@@ -86,6 +88,32 @@ func (pl *PhoneLogin) SubmitUserInput(ctx context.Context, input map[string]stri
 	}
 }
 
+var phoneLoginStep = &bridgev2.LoginStep{
+	Type:   bridgev2.LoginStepTypeUserInput,
+	StepID: LoginStepIDCode,
+	UserInputParams: &bridgev2.LoginUserInputParams{
+		Fields: []bridgev2.LoginInputDataField{{
+			Type:        bridgev2.LoginInputFieldType2FACode,
+			ID:          LoginStepIDCode,
+			Name:        "Code",
+			Description: "The code was sent to the Telegram app on your phone",
+		}},
+	},
+}
+
+var phoneCodeIncorrectStep = &bridgev2.LoginStep{
+	Type:         bridgev2.LoginStepTypeUserInput,
+	StepID:       LoginStepIDCodeIncorrect,
+	Instructions: "Incorrect code",
+	UserInputParams: &bridgev2.LoginUserInputParams{
+		Fields: []bridgev2.LoginInputDataField{{
+			Type: bridgev2.LoginInputFieldType2FACode,
+			ID:   LoginStepIDCode,
+			Name: "Code",
+		}},
+	},
+}
+
 func (pl *PhoneLogin) submitNumber(ctx context.Context, phone string) (*bridgev2.LoginStep, error) {
 	if phone == "" {
 		return nil, fmt.Errorf("phone number is empty")
@@ -105,18 +133,7 @@ func (pl *PhoneLogin) submitNumber(ctx context.Context, phone string) (*bridgev2
 	switch s := sentCode.(type) {
 	case *tg.AuthSentCode:
 		pl.hash = s.PhoneCodeHash
-		return &bridgev2.LoginStep{
-			Type:   bridgev2.LoginStepTypeUserInput,
-			StepID: LoginStepIDCode,
-			UserInputParams: &bridgev2.LoginUserInputParams{
-				Fields: []bridgev2.LoginInputDataField{{
-					Type:        bridgev2.LoginInputFieldType2FACode,
-					ID:          LoginStepIDCode,
-					Name:        "Code",
-					Description: "The code was sent to the Telegram app on your phone",
-				}},
-			},
-		}, nil
+		return phoneLoginStep, nil
 	case *tg.AuthSentCodeSuccess:
 		switch authorization := s.Authorization.(type) {
 		case *tg.AuthAuthorization:
@@ -140,7 +157,7 @@ func (pl *PhoneLogin) submitCode(ctx context.Context, code string) (*bridgev2.Lo
 		pl.codeSubmitted = true
 		return passwordLoginStep, nil
 	} else if errors.Is(err, auth.ErrPhoneCodeInvalid) {
-		return nil, ErrPhoneCodeInvalid
+		return phoneCodeIncorrectStep, nil
 	} else if errors.Is(err, &auth.SignUpRequired{}) {
 		return nil, ErrSignUpNotSupported
 	} else if err != nil {

@@ -18,9 +18,12 @@ package media
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"os"
 	"strconv"
 
+	"github.com/klauspost/compress/gzip"
 	"github.com/rs/zerolog"
 	"go.mau.fi/util/ffmpeg"
 	"go.mau.fi/util/lottie"
@@ -107,12 +110,43 @@ func (c *AnimatedStickerConfig) convertWebm(ctx context.Context, src *os.File) *
 	}
 }
 
-func (c *AnimatedStickerConfig) convert(ctx context.Context, src *os.File) *ConvertedSticker {
-	if c.Target == "disable" {
-		return nil
+func extractGZip(src *os.File) (*ConvertedSticker, error) {
+	reader, err := gzip.NewReader(src)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create gzip reader: %w", err)
 	}
+	defer func() {
+		_ = reader.Close()
+	}()
+	replFile, err := os.OpenFile(src.Name()+".json", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create temp file: %w", err)
+	}
+	defer func() {
+		_ = replFile.Close()
+	}()
+	n, err := io.Copy(replFile, reader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract lottie gzip: %w", err)
+	}
+	return &ConvertedSticker{
+		Success:  true,
+		NewPath:  replFile.Name(),
+		MIMEType: "video/lottie+json",
+		Size:     int(n),
+	}, nil
+}
 
+func (c *AnimatedStickerConfig) convert(ctx context.Context, src *os.File) *ConvertedSticker {
 	log := zerolog.Ctx(ctx).With().Str("animated_sticker_target", c.Target).Logger()
+
+	if c.Target == "disable" {
+		converted, err := extractGZip(src)
+		if err != nil {
+			log.Err(err).Msg("Failed to extract lottie sticker")
+		}
+		return converted
+	}
 
 	if !lottie.Supported() {
 		log.Warn().Msg("Not converting lottie sticker as lottieconverter is not installed")

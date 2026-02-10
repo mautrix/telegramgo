@@ -471,8 +471,15 @@ func (t *TelegramClient) handleServiceMessage(ctx context.Context, msg *tg.Messa
 			ConvertMessageFunc: func(ctx context.Context, portal *bridgev2.Portal, intent bridgev2.MatrixAPI, data any) (*bridgev2.ConvertedMessage, error) {
 				return &bridgev2.ConvertedMessage{
 					Parts: []*bridgev2.ConvertedMessagePart{{
-						Type:    event.EventMessage,
-						Content: &event.MessageEventContent{MsgType: event.MsgNotice, Body: body},
+						Type: event.EventMessage,
+						Content: &event.MessageEventContent{
+							MsgType: event.MsgNotice,
+							Body:    body,
+							BeeperActionMessage: &event.BeeperActionMessage{
+								Type:     event.BeeperActionMessageCall,
+								CallType: event.BeeperActionMessageCallTypeVideo,
+							},
+						},
 					}},
 				}, nil
 			},
@@ -1335,11 +1342,14 @@ func (t *TelegramClient) onPhoneCall(ctx context.Context, e tg.Entities, update 
 		return nil
 	}
 
+	var callType event.BeeperActionMessageCallType
 	var body strings.Builder
 	body.WriteString("Started a ")
 	if call.Video {
+		callType = event.BeeperActionMessageCallTypeVideo
 		body.WriteString("video call")
 	} else {
+		callType = event.BeeperActionMessageCallTypeVoice
 		body.WriteString("call")
 	}
 	res := t.main.Bridge.QueueRemoteEvent(t.userLogin, &simplevent.Message[any]{
@@ -1354,8 +1364,15 @@ func (t *TelegramClient) onPhoneCall(ctx context.Context, e tg.Entities, update 
 			return &bridgev2.ConvertedMessage{
 				Parts: []*bridgev2.ConvertedMessagePart{
 					{
-						Type:    event.EventMessage,
-						Content: &event.MessageEventContent{MsgType: event.MsgNotice, Body: body.String()},
+						Type: event.EventMessage,
+						Content: &event.MessageEventContent{
+							MsgType: event.MsgNotice,
+							Body:    body.String(),
+							BeeperActionMessage: &event.BeeperActionMessage{
+								Type:     event.BeeperActionMessageCall,
+								CallType: callType,
+							},
+						},
 					},
 				},
 			}, nil

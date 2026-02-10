@@ -293,7 +293,7 @@ func (t *ReadyTransferer) Transfer(ctx context.Context, store *store.Container, 
 			if t.inner.fileInfo.MimeType == "video/webm" {
 				converted = t.inner.animatedStickerConfig.convertWebm(ctx, osFile)
 			} else {
-				t.inner.fileInfo.MimeType = "video/lottie+json"
+				t.inner.fileInfo.MimeType = "application/x-tgsticker" // This is expected to get overridden by convert
 				converted = t.inner.animatedStickerConfig.convert(ctx, osFile)
 			}
 			if converted != nil {
@@ -407,7 +407,7 @@ func (t *ReadyTransferer) ToDirectMediaResponse(ctx context.Context) (mediaproxy
 				if t.inner.fileInfo.MimeType == "video/webm" {
 					converted = t.inner.animatedStickerConfig.convertWebm(ctx, w)
 				} else {
-					t.inner.fileInfo.MimeType = "video/lottie+json"
+					t.inner.fileInfo.MimeType = "application/x-tgsticker" // This is expected to get overridden by convert
 					converted = t.inner.animatedStickerConfig.convert(ctx, w)
 				}
 				if converted == nil {

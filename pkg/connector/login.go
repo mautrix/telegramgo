@@ -159,8 +159,9 @@ func (bl *baseLogin) makeClient(ctx context.Context, dispatcher *tg.UpdateDispat
 }
 
 var passwordLoginStep = &bridgev2.LoginStep{
-	Type:   bridgev2.LoginStepTypeUserInput,
-	StepID: LoginStepIDPassword,
+	Type:         bridgev2.LoginStepTypeUserInput,
+	StepID:       LoginStepIDPassword,
+	Instructions: "You have two-factor authentication enabled.",
 	UserInputParams: &bridgev2.LoginUserInputParams{
 		Fields: []bridgev2.LoginInputDataField{{
 			Type: bridgev2.LoginInputFieldTypePassword,

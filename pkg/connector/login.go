@@ -232,12 +232,13 @@ func (bl *baseLogin) finalizeLogin(
 	ul.Client.Connect(ul.Log.WithContext(bl.main.Bridge.BackgroundCtx))
 	client := ul.Client.(*TelegramClient)
 
+	bgCtx := ul.Log.WithContext(bl.main.Bridge.BackgroundCtx)
 	go func() {
 		if metadata.IsBot {
 			return
 		}
 		log := ul.Log.With().Str("action", "post-login sync").Logger()
-		err := client.clientInitialized.Wait(ctx)
+		err := client.clientInitialized.Wait(bgCtx)
 		if err != nil {
 			log.Err(err).Msg("Failed to wait for client init to sync chats after login")
 		} else if err = client.SyncChats(log.WithContext(client.clientCtx)); err != nil {
@@ -252,13 +253,18 @@ func (bl *baseLogin) finalizeLogin(
 		log := ul.Log.With().Str("component", "post-login takeout").Logger()
 		client.takeoutLock.Lock()
 		defer client.takeoutLock.Unlock()
-		err := client.clientInitialized.Wait(ctx)
+		err := client.clientInitialized.Wait(bgCtx)
 		if err != nil {
 			log.Err(err).Msg("Failed to wait for client init to start takeout")
-		} else if _, err = client.getTakeoutID(ctx); err != nil {
+		} else if _, err = client.getTakeoutID(bgCtx); err != nil {
 			log.Err(err).Msg("Failed to get takeout")
 		} else if client.stopTakeoutTimer == nil {
-			client.stopTakeoutTimer = time.AfterFunc(max(time.Hour, time.Duration(client.main.Bridge.Config.Backfill.Queue.BatchDelay*2)), sync.OnceFunc(func() { client.stopTakeout(ctx) }))
+			client.stopTakeoutTimer = time.AfterFunc(max(time.Hour, time.Duration(client.main.Bridge.Config.Backfill.Queue.BatchDelay*2)), sync.OnceFunc(func() {
+				err := client.stopTakeout(bgCtx)
+				if err != nil {
+					log.Err(err).Msg("Error stopping takeout in timer started after login")
+				}
+			}))
 		} else {
 			client.stopTakeoutTimer.Reset(max(time.Hour, time.Duration(client.main.Bridge.Config.Backfill.Queue.BatchDelay*2)))
 		}

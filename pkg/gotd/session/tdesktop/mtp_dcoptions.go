@@ -1,6 +1,8 @@
 package tdesktop
 
 import (
+	"fmt"
+
 	"github.com/go-faster/errors"
 
 	"go.mau.fi/mautrix-telegram/pkg/gotd/bin"
@@ -118,7 +120,7 @@ func (m *MTPDCOptions) deserialize(r *qtReader) error {
 	for i := 0; i < int(count); i++ {
 		var o MTPDCOption
 		if err := o.deserialize(r, version); err != nil {
-			return errors.Errorf("read option %d: %w", i, err)
+			return fmt.Errorf("read option %d: %w", i, err)
 		}
 		m.Options = append(m.Options, o)
 	}
